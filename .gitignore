@@ -1,0 +1,34 @@
+# Archivos de entorno y configuración
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Modelos y binarios
+models/*.pkl
+models/*.h5
+models/*.onnx
+models/*.pt
+
+# Datos pesados y sensibles
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/external/*
+!data/external/.gitkeep
+
+# Logs
+logs/*.log
+
+# IDE y sistema operativo
+.vscode/
+.idea/
+.DS_Store
+*.swp

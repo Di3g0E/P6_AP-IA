@@ -1,0 +1,133 @@
+\documentclass[a4paper,12pt,twoside]{article}
+
+% Paquetes básicos
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{caption}
+
+% Márgenes y geometría
+\geometry{a4paper, margin=2.5cm}
+
+% Configuración del estilo de página
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[RE,LO]{Memoria de la Práctica}
+
+% Redefinir cleardoublepage para asegurar página en blanco sin numeración
+\makeatletter
+\def\cleardoublepage{\clearpage\if@twoside \ifodd\c@page\else
+    \hbox{}
+    \vspace*{\fill}
+    \begin{center}
+       % Opcional: \textit{Página intencionadamente en blanco}
+    \end{center}
+    \vspace{\fill}
+    \thispagestyle{empty}
+    \newpage
+    \if@twocolumn\hbox{}\newpage\fi\fi\fi}
+\makeatother
+
+\begin{document}
+
+% ==============================================
+% PÁGINA 1: PORTADA
+% ==============================================
+\begin{titlepage}
+    \thispagestyle{empty} % Ocultar numeración en portada
+    \begin{center}
+        \vspace*{2cm}
+        
+        % Logo URJC
+        % \includegraphics[width=0.6\textwidth]{logo_urjc.png} \\ % Sustituir por la ruta real del logo
+        
+        \vspace{2cm}
+        
+        \Huge \textbf{Práctica 6} \\
+        \vspace{0.5cm}
+        \Large \textbf{Asignatura: Inteligencia Artificial}
+        
+        \vspace{3cm}
+        
+        \Large \textbf{Autores:} \\
+        \vspace{0.5cm}
+        Nombre del Estudiante 1 - DNI: XXXXXXXX-X \\
+        Nombre del Estudiante 2 - DNI: XXXXXXXX-X \\ % Añadir o quitar autores según corresponda
+        
+        \vspace{3cm}
+        
+        \Large \textbf{Universidad Rey Juan Carlos} \\
+        \large Grado en Ingeniería Informática \\
+        \large Curso 2025-26
+        
+    \end{center}
+\end{titlepage}
+% ==============================================
+
+% Reiniciar contador de páginas internamente DESPUÉS de la portada
+% Así la página en blanco siguiente es la 0, y el índice la 1
+\setcounter{page}{0}
+
+% ==============================================
+% PÁGINA 2: EN BLANCO (Manejada por twoside y cleardoublepage)
+% ==============================================
+\cleardoublepage
+
+% ==============================================
+% PÁGINA 3: ÍNDICE
+% ==============================================
+\thispagestyle{empty} % Ocultar numeración en índice
+\tableofcontents
+
+% Si hay 5 o más figuras, se debe descomentar esto:
+% \listoffigures
+
+\cleardoublepage
+
+% ==============================================
+% SECCIONES OBLIGATORIAS (Cada una comienza en impar)
+% ==============================================
+
+% La numeración visible empieza a partir de la Introducción
+\pagestyle{fancy}
+
+\section{Introducción}
+% Normalmente de media página a una página completa.
+Aquí comienza la introducción de la práctica. Explicar brevemente el problema a resolver y los objetivos propuestos.
+
+\cleardoublepage
+
+\section{Contexto}
+Descripción del entorno de trabajo, herramientas utilizadas y bases teóricas de la práctica.
+
+\cleardoublepage
+
+\section{Estado del Arte}
+Investigación y análisis de aproximaciones existentes, posibles soluciones y alternativas tecnológicas.
+
+\cleardoublepage
+
+\section{Propuesta}
+Explicación detallada de la arquitectura, diseño e implementación realizada para resolver el problema.
+Se puede dividir en subsecciones si es necesario.
+
+\cleardoublepage
+
+\section{Conclusiones}
+% Normalmente de media página a una página completa.
+Resumen de los resultados obtenidos, dificultades encontradas y posibles mejoras futuras.
+
+\cleardoublepage
+
+% ==============================================
+% REFERENCIAS
+% ==============================================
+\begin{thebibliography}{9}
+\bibitem{ref1} Autor. \textit{Título}. Editorial, Año.
+\end{thebibliography}
+
+\end{document}
