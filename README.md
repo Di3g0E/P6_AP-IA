@@ -127,7 +127,6 @@ Esto levanta `db` (Postgres 15) + `api` (FastAPI) en la misma red Docker. La API
 - **Frontend**: [Vercel free](https://vercel.com) (Next.js automático desde GitHub).
 - **Backend**: tu máquina local + [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (URL pública HTTPS gratis y estable).
 
-Coste total: 0 €.
 
 ## Modos de ejecución
 
