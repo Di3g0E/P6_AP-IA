@@ -264,6 +264,16 @@ def register_user(request: RegisterRequest) -> SecurityVerdict:
             session.add(user)
             session.flush()
             user_id = str(user.id)
+            
+            # Crear UserSettings con configuración de notificaciones
+            from src.data.schema import UserSettings
+            settings = UserSettings(
+                user_id=user.id,
+                notifications_enabled=request.notifications_enabled,
+                telegram_chat_id=request.telegram_chat_id if request.notifications_enabled else None,
+                notification_level="redacted",  # Nivel seguro por defecto
+            )
+            session.add(settings)
     except Exception as e:
         logger.exception(f"register_user: INSERT falló: {e}")
         # Devolvemos el detalle al cliente para facilitar el diagnóstico:
@@ -284,13 +294,22 @@ def register_user(request: RegisterRequest) -> SecurityVerdict:
             reason=f"No se pudo almacenar el embedding: {_format_db_error(e)}",
         )
 
-    # 6. Notificación opt-in
-    cfg = _get_notif_config(user_id)
-    if cfg is not None:
+    # 6. Notificación opt-in - Usar el sistema de notificaciones integrado
+    if request.notifications_enabled and request.telegram_chat_id:
         try:
+            from src.utils.notifications import UserNotificationConfig, notify_register
+            cfg = UserNotificationConfig(
+                user_id=user_id,
+                notifications_enabled=request.notifications_enabled,
+                telegram_chat_id=request.telegram_chat_id,
+                notification_level="redacted"  # Por defecto seguro
+            )
             notify_register(cfg)
+            logger.info(f"Notificación de registro enviada a {request.telegram_chat_id}")
         except Exception as e:
             logger.warning(f"notify_register falló: {e}")
+    else:
+        logger.debug(f"Notificaciones desactivadas o sin Chat ID para {user_id}")
 
     logger.info(f"Usuario registrado: {user_id} ({request.email})")
     return SecurityVerdict(

@@ -93,13 +93,29 @@ export async function register(
   email: string,
   passphrase: string,
   consent: boolean,
-  face: Blob,
+  face?: Blob,  // Opcional - desactivado temporalmente
+  notificationsEnabled?: boolean,
+  telegramChatId?: string,
 ): Promise<TokenResponse> {
   const fd = new FormData();
   fd.append("email", email);
   fd.append("passphrase", passphrase);
   fd.append("biometric_consent", String(consent));
-  fd.append("face", face, "face.jpg");
+  
+  // Notificaciones opcionales
+  if (notificationsEnabled !== undefined) {
+    fd.append("notifications_enabled", String(notificationsEnabled));
+  }
+  if (telegramChatId) {
+    fd.append("telegram_chat_id", telegramChatId);
+  }
+  
+  // BIOMETRÍA DESACTIVADA TEMPORALMENTE
+  if (face) {
+    fd.append("face", face, "face.jpg");
+  }
+  // Si no hay face, no lo añadimos - el backend lo manejará como opcional
+  
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
     body: fd,
@@ -111,12 +127,18 @@ export async function register(
 export async function login(
   email: string,
   passphrase: string,
-  face: Blob,
+  face?: Blob,  // Opcional - desactivado temporalmente
 ): Promise<TokenResponse> {
   const fd = new FormData();
   fd.append("email", email);
   fd.append("passphrase", passphrase);
-  fd.append("face", face, "face.jpg");
+  
+  // BIOMETRÍA DESACTIVADA TEMPORALMENTE
+  if (face) {
+    fd.append("face", face, "face.jpg");
+  }
+  // Si no hay face, no lo añadimos - el backend lo manejará como opcional
+  
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     body: fd,

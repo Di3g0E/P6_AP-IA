@@ -26,7 +26,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from src.api.routers import auth, chat, transactions
+from src.api.routers import auth, chat, transactions, settings as settings_router
 from src.utils.config import settings
 from src.utils.logging_config import configure_logging
 
@@ -63,6 +63,10 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(transactions.router)
+app.include_router(settings_router.router)
+
+# Endpoint público para webhook de Telegram (no requiere autenticación)
+app.include_router(settings_router.router, prefix="/telegram", tags=["telegram"])
 
 
 @app.get("/", tags=["health"], summary="Healthcheck")

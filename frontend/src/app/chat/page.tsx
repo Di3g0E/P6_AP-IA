@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { chat, clearToken, getUserId } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 
 type Turn = {
   role: "user" | "assistant";
@@ -26,6 +29,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Protege la ruta: sin token → /login
@@ -80,95 +84,227 @@ export default function ChatPage() {
     router.replace("/login");
   };
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Error al copiar:", err);
+    }
+  };
+
   if (!userId) {
     return <p className="text-sm text-slate-500">Cargando…</p>;
   }
 
   return (
-    <section className="space-y-4">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Chat</h1>
-          <p className="text-xs text-slate-500">
-            Usuario: <code className="font-mono">{userId.slice(0, 8)}…</code>
-            {sessionId && (
-              <>
-                {" · "}sesión <code className="font-mono">{sessionId.slice(0, 8)}…</code>
-              </>
-            )}
-          </p>
-        </div>
-        <button onClick={onLogout} className="btn-secondary text-sm">
-          Cerrar sesión
-        </button>
-      </header>
-
-      <div
-        ref={scrollRef}
-        className="card max-h-[60vh] min-h-[40vh] overflow-y-auto space-y-3"
-      >
-        {turns.length === 0 && (
-          <div className="text-sm text-slate-500">
-            <p>Escribe una pregunta o prueba una sugerencia:</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className="btn-secondary text-xs"
-                  onClick={() => send(s)}
-                >
-                  {s}
-                </button>
-              ))}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/50 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h1 className="text-xl font-bold gradient-text">Asistente Financiero</h1>
+              <div className="flex items-center space-x-2 mt-1">
+                <span className="text-xs text-slate-500">ID Usuario:</span>
+                <div className="flex items-center space-x-1 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+                  <code className="text-xs font-mono text-slate-700">{userId}</code>
+                  <button
+                    onClick={() => copyToClipboard(userId)}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors group"
+                    title="Copiar UUID"
+                  >
+                    {copied ? (
+                      <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3 text-slate-500 group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {sessionId && (
+                  <span className="text-xs text-slate-500">
+                    · Sesión: <code className="font-mono bg-slate-100 px-1 rounded">{sessionId.slice(0, 8)}…</code>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        )}
-        {turns.map((t, i) => (
-          <div
-            key={i}
-            className={
-              t.role === "user"
-                ? "ml-auto max-w-[80%] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white"
-                : "max-w-[80%] rounded-lg bg-slate-100 px-3 py-2 text-sm dark:bg-slate-800"
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onLogout}
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
             }
           >
-            <p className="whitespace-pre-wrap">{t.text}</p>
-            {t.action && (
-              <p className="mt-1 text-[10px] uppercase tracking-wider opacity-60">
-                {t.action}
-              </p>
-            )}
-          </div>
-        ))}
-        {loading && (
-          <p className="text-sm italic text-slate-500">El orquestador está pensando…</p>
-        )}
-      </div>
+            Cerrar sesión
+          </Button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        <Card variant="glass" className="h-[600px] flex flex-col">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Conversación</CardTitle>
+          </CardHeader>
+          
+          <CardContent className="flex-1 flex flex-col">
+            <div
+              ref={scrollRef}
+              className="flex-1 overflow-y-auto space-y-4 pr-2"
+            >
+              {turns.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full mb-4">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800 mb-2">¡Hola! 👋</h3>
+                  <p className="text-slate-600 mb-6">Soy tu asistente financiero personal. ¿En qué puedo ayudarte hoy?</p>
+                  
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-slate-700">Prueba estas preguntas rápidas:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {SUGGESTIONS.map((s) => (
+                        <Button
+                          key={s}
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => send(s)}
+                          className="text-left justify-start h-auto py-3 px-4 text-xs"
+                        >
+                          {s}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                turns.map((t, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${t.role === "user" ? "justify-end" : "justify-start"} animate-fadeIn`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                        t.role === "user"
+                          ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg"
+                          : "bg-white/80 backdrop-blur-sm border border-slate-200/50 shadow-md"
+                      }`}
+                    >
+                      <div className="flex items-start space-x-2">
+                        {t.role === "assistant" && (
+                          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <p className={`text-sm whitespace-pre-wrap ${t.role === "user" ? "text-white" : "text-slate-800"}`}>
+                            {t.text}
+                          </p>
+                          {t.action && (
+                            <p className={`mt-2 text-xs uppercase tracking-wider ${
+                              t.role === "user" ? "text-blue-100" : "text-slate-500"
+                            }`}>
+                              {t.action}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              
+              {loading && (
+                <div className="flex justify-center">
+                  <div className="bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-full px-4 py-2 shadow-md">
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                        <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse delay-100"></div>
+                        <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse delay-200"></div>
+                      </div>
+                      <span className="text-sm text-slate-600">El orquestador está pensando…</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input Form */}
+            <div className="pt-4 border-t border-slate-200/50">
+              <form onSubmit={onSubmit} className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder="Escribe tu mensaje…"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    disabled={loading}
+                    className="w-full rounded-lg border border-slate-300/50 bg-white/80 backdrop-blur-sm px-12 py-3 text-sm text-slate-800 transition-all duration-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  disabled={loading || !input.trim()}
+                  icon={
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  }
+                >
+                  Enviar
+                </Button>
+              </form>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
 
       {error && (
-        <p className="rounded-md bg-red-50 p-2 text-sm text-red-800 dark:bg-red-950/30">
-          {error}
-        </p>
+        <div className="fixed bottom-4 right-4 max-w-md">
+          <Card variant="default" className="border-red-200 bg-red-50">
+            <CardContent className="p-4 flex items-center">
+              <svg className="w-5 h-5 text-red-600 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800">Error</p>
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       )}
-
-      <form onSubmit={onSubmit} className="flex gap-2">
-        <input
-          type="text"
-          className="input flex-1"
-          placeholder="Escribe tu mensaje…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={loading}
-        />
-        <button
-          type="submit"
-          className="btn-primary"
-          disabled={loading || !input.trim()}
-        >
-          Enviar
-        </button>
-      </form>
-    </section>
+    </div>
   );
 }

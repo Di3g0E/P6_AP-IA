@@ -57,6 +57,8 @@ class RegisterRequest(BaseModel):
     passphrase: str
     face_image: bytes
     biometric_consent: bool = False
+    notifications_enabled: bool = False
+    telegram_chat_id: Optional[str] = None
 
 
 class LoginRequest(BaseModel):

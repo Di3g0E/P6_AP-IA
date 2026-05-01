@@ -208,8 +208,14 @@ def notify(config: UserNotificationConfig, action: str, success: bool = True, **
 
     # 1. Telegram (canal primario)
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        # Solución temporal: usar el token directamente
+        bot_token = "8683693899:AAGbrUfwHKmulhblkjdNpgZRjoFHJVNEgwo"
+        logger.info("Usando token de Telegram configurado directamente")
+    
     if bot_token and config.telegram_chat_id:
         TelegramService(bot_token, config.telegram_chat_id).send_message(message)
+        logger.info(f"Notificación enviada a {config.telegram_chat_id}")
     elif config.telegram_chat_id and not bot_token:
         logger.warning("TELEGRAM_BOT_TOKEN no configurado en el servidor")
 
