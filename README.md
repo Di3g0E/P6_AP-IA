@@ -2,7 +2,6 @@
 
 Integra las funcionalidades de las prácticas P1-P5 bajo un único sistema controlado por agentes con autenticación biométrica, soporte multiusuario y persistencia en Postgres.
 
-> **Estado**: en desarrollo. Esta primera versión consolida las dependencias, fija el esquema de datos y el contrato de los agentes. La implementación de cada agente y los endpoints HTTP llegan en sucesivas iteraciones. Ver [doc/agent_contracts.md](doc/agent_contracts.md).
 
 ## Descripción del sistema
 
