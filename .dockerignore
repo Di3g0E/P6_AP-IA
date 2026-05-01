@@ -1,0 +1,31 @@
+.venv/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Datos y modelos pesados — montados como volumen, no copiados a la imagen
+data/raw/*
+data/processed/*
+data/external/*
+models/*.joblib
+models/*.pkl
+models/*.pt
+models/*.h5
+
+# Logs y entornos
+logs/*.log
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Documentación que no necesita la imagen
+doc/
+references/
+playground/
+tests/
+.pytest_cache/

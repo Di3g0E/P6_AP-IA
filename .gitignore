@@ -25,10 +25,20 @@ data/external/*
 !data/external/.gitkeep
 
 # Logs
-logs/*.log
+# logs/*.log
+
+# Bases de datos locales (SQLite de dev)
+data/*.db
+data/*.db-journal
+data/*.sqlite
+data/*.sqlite3
 
 # IDE y sistema operativo
 .vscode/
 .idea/
 .DS_Store
 *.swp
+
+# Documentos
+doc/main.tex
+doc/
