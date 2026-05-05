@@ -77,55 +77,150 @@ P6_AP-IA/
 
 ## Configuración del entorno
 
-### Opción 1 — Local con `uv` (desarrollo, sin Docker)
+> **Resumen rápido**: hay tres formas de levantarlo según tu entorno.
+>
+> | Opción | DB | Cuándo usarla | Tiempo de setup |
+> |---|---|---|---|
+> | **1. Local + SQLite** | `data/p6.db` | Desarrollo y demo en tu máquina. Cero infra. | ~5-10 min (instalar deps) |
+> | **2A. Mixto** (uvicorn local + Postgres en Docker) | Postgres en contenedor `db` | Quieres Postgres real pero sin meter el backend (con torch/paddle) en Docker. | ~5 min |
+> | **2B. Todo en Docker** | Postgres en contenedor `db` | Demo reproducible / despliegue. **Requiere ≥ 8 GB RAM y ≥ 60 GB de disco asignados a Docker Desktop**, ver Troubleshooting. | ~20-25 min (build pesado) |
+> | **3. Cloud** | Supabase | Demo pública vía Cloudflare Tunnel + Vercel. | variable |
 
-Por defecto usa **SQLite** en `data/p6.db`; cero setup adicional.
+### Opción 1 — Local con `uv` + SQLite (recomendada para desarrollo)
+
+Cero infra: el backend corre en tu Python local y los datos van a `data/p6.db`.
 
 ```bash
 # 1. Crear entorno virtual
 uv venv .venv --python 3.12
 
-# 2. Instalar dependencias
+# 2. Instalar dependencias (~2 GB en total: torch, paddle, paddleocr, ...)
 uv pip install --python .venv/Scripts/python.exe --link-mode=copy -r requirements.txt
 
 # 3. Copiar variables de entorno
 cp .env.example .env
-# editar .env y rellenar:
-#   - MASTER_FERNET_KEY (generar con el comando indicado en el .env.example)
-#   - GROQ_API_KEY (https://console.groq.com)
-#   - DATABASE_URL — opcional; si vacío o '...' usa SQLite local automáticamente
-#   - TELEGRAM_BOT_TOKEN (opcional)
+```
 
+Edita `.env` y rellena al menos:
+- **`DATABASE_URL=`** — déjalo **vacío** para que caiga automáticamente a SQLite (`data/p6.db`). Si pegaste accidentalmente una URL Postgres aquí, fallará con `connection refused`.
+- **`MASTER_FERNET_KEY`** — generar con el comando indicado en `.env.example`.
+- **`GROQ_API_KEY`** — https://console.groq.com (tier free).
+- `TELEGRAM_BOT_TOKEN` — opcional.
+
+```bash
 # 4. Inicializar la base de datos (crea tablas + usuario demo + migra el CSV)
 .venv/Scripts/python.exe scripts/init_db.py
 
-# 5. Lanzar la demo CLI
+# 5. Lanzar la API
+.venv/Scripts/python.exe -m uvicorn src.api.main:app --reload --port 8000
+# → http://localhost:8000/docs
+
+# (alternativa: demo CLI sin servidor HTTP)
 .venv/Scripts/python.exe main.py
 ```
 
 > **Nota**: `scripts/init_db.py` es idempotente — vuelve a lanzarlo cuantas veces
 > quieras. Para empezar de cero usa `python scripts/init_db.py --reset`.
 
-### Opción 2 — Docker Compose (despliegue local + Postgres)
+### Opción 2A — Mixto: uvicorn local + Postgres en Docker
+
+Útil si quieres Postgres real (en lugar de SQLite) pero **sin** construir la imagen pesada del backend. Solo levantas el contenedor `db`.
 
 ```bash
-cp .env.example .env  # editar con tus claves
+# 1. Solo el servicio de Postgres
+docker compose up -d db
+
+# 2. En .env pon:
+#    DATABASE_URL=postgresql+psycopg://app:app@localhost:5432/p6
+#    (host = localhost porque uvicorn corre fuera de docker)
+
+# 3. Inicializar BD desde tu máquina
+.venv/Scripts/python.exe scripts/init_db.py
+
+# 4. Arrancar uvicorn local como en la Opción 1
+.venv/Scripts/python.exe -m uvicorn src.api.main:app --reload --port 8000
+```
+
+### Opción 2B — Todo en Docker Compose
+
+Levanta `db` + `api` en la misma red Docker. La API queda en `http://localhost:8000`.
+
+> ⚠️ **Antes de lanzar el build** — en Docker Desktop → Settings → Resources, asegúrate de tener **al menos 8 GB de RAM y 60 GB de disco** asignados. La imagen del backend pesa varios GB (torch + paddle + paddleocr) y por defecto Docker Desktop puede no tener suficiente para exportar la capa final. Ver [Troubleshooting](#troubleshooting).
+
+```bash
+cp .env.example .env  # editar con tus claves (DATABASE_URL puede dejarse vacío)
 docker compose up --build
 
 # (En otra terminal, una vez la BD está arriba)
 docker compose exec api python scripts/init_db.py
 ```
 
-Esto levanta `db` (Postgres 15) + `api` (FastAPI) en la misma red Docker. La API queda accesible en `http://localhost:8000`.
+> No necesitas tocar `DATABASE_URL` en `.env`: `docker-compose.yml` la sobreescribe con `postgresql+psycopg://app:app@db:5432/p6` (host = `db`, el nombre del servicio en la red interna de Docker). Lo que pongas en `.env` para esa variable se ignora.
 
-> El `.env` debe tener `DATABASE_URL=postgresql+psycopg://app:app@db:5432/p6`
-> (la línea ya está en `.env.example`).
+### Opción 3 — Cloud gratuito (recomendado para demo pública)
 
-### Opción 3 — Cloud gratuito (recomendado para demo)
+Combinación: **Supabase** (Postgres gestionado) + **Cloudflare Tunnel** (URL pública HTTPS para el backend que sigue corriendo en tu máquina) + **Vercel** (frontend Next.js).
 
-- **Postgres**: [Supabase free](https://supabase.com) (500 MB, TDE en reposo).
-- **Frontend**: [Vercel free](https://vercel.com) (Next.js automático desde GitHub).
-- **Backend**: tu máquina local + [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (URL pública HTTPS gratis y estable).
+#### 3.1 — Postgres en Supabase
+
+1. Crea cuenta gratuita en https://supabase.com → **New project**. Anota la **database password** que te pide al crear.
+2. En el proyecto: **Project Settings → Database → Connection string** → pestaña **URI**.
+   - Copia la URL del **Connection pooling** (puerto `6543`, modo *transaction*). Es más estable para apps serverless / con reconexiones que la directa del 5432.
+3. Pega esa URL en tu `.env` añadiéndole el driver `+psycopg`:
+   ```
+   DATABASE_URL=postgresql+psycopg://postgres.<ref>:<PASSWORD>@aws-0-<region>.pooler.supabase.com:6543/postgres
+   ```
+4. Crea tablas y usuario demo contra Supabase:
+   ```bash
+   .venv/Scripts/python.exe scripts/init_db.py
+   ```
+
+#### 3.2 — Backend público con Cloudflare Tunnel
+
+Tu uvicorn sigue corriendo en local (`localhost:8000`); Cloudflare expone una URL HTTPS pública que apunta a él.
+
+**Variante rápida (URL aleatoria, sin cuenta)** — ideal para una demo de un rato:
+
+```bash
+# Instalar cloudflared (Windows: winget install --id Cloudflare.cloudflared, o descarga desde cloudflare.com)
+cloudflared tunnel --url http://localhost:8000
+```
+Imprime una URL del estilo `https://random-words-1234.trycloudflare.com`. Cambia cada vez que lo arrancas.
+
+**Variante persistente (URL fija, requiere cuenta gratis Cloudflare)**:
+
+1. https://dash.cloudflare.com → **Zero Trust → Networks → Tunnels → Create a tunnel**.
+2. Asigna nombre, copia el **token**.
+3. En tu `.env` añade `CLOUDFLARED_TOKEN=<tu_token>`.
+4. Descomenta el bloque `cloudflared` en [`docker-compose.yml`](docker-compose.yml#L60-L66) y lánzalo:
+   ```bash
+   docker compose up -d cloudflared
+   ```
+5. En el panel del túnel, configura un *public hostname* (subdominio Cloudflare gratis o tu dominio) que apunte a `http://host.docker.internal:8000` (o `http://api:8000` si tu uvicorn corre en `docker compose`).
+
+Arranca uvicorn como en la Opción 1: `python -m uvicorn src.api.main:app --port 8000`.
+
+#### 3.3 — Frontend en Vercel
+
+1. Sube tu repo a GitHub si aún no lo está.
+2. https://vercel.com → **Add New Project** → importa el repo.
+3. **Root directory**: `P6_AP-IA/frontend`. Vercel detecta Next.js automáticamente.
+4. **Environment Variables** (en la página del proyecto en Vercel):
+   ```
+   NEXT_PUBLIC_API_BASE_URL = https://<tu-tunel>.trycloudflare.com
+   ```
+   (la URL pública que te dio Cloudflare en el paso 3.2)
+5. Deploy. Vercel te asigna un dominio `https://<proyecto>.vercel.app`.
+
+#### 3.4 — Permitir el dominio Vercel en CORS
+
+De vuelta en tu `.env` del backend:
+```
+CORS_ORIGINS=http://localhost:3000,https://<proyecto>.vercel.app
+```
+**Reinicia uvicorn** para que recargue. Sin este paso, el frontend desplegado no podrá llamar al backend (el navegador bloquea por CORS).
+
+> **Nota privacidad**: con esta arquitectura los datos viajan de Vercel → Cloudflare Tunnel → tu máquina → Supabase. Todo sobre HTTPS. La biometría se sigue cifrando con Fernet en aplicación antes de tocar Postgres.
 
 
 ## Modos de ejecución
@@ -248,6 +343,32 @@ Cada usuario decide su `notification_level`:
 - Endpoint `GET /me/export` que genera un ZIP con todos los datos del usuario.
 - Logs sin PII en claro: la tabla `events` solo guarda IDs/hashes y metadatos.
 - TLS obligatorio en producción (provisto por Cloudflare Tunnel o Vercel).
+
+## Troubleshooting
+
+### Docker: `failed to compute cache key: EOF` o error 500 al final del build
+
+Síntoma: el `docker compose up --build` instala las dependencias correctamente (`Successfully installed ...152 paquetes`), pero al llegar al paso `exporting layers` Docker Desktop se reinicia o devuelve un error EOF / 500.
+
+Causa: torch + paddlepaddle + paddleocr + facenet-pytorch generan una imagen de varios GB; al consolidar la capa final Docker Desktop se queda sin memoria o sin disco.
+
+Soluciones (en orden):
+1. **Subir recursos**: Docker Desktop → Settings → Resources → Memory ≥ 8 GB, Disk image size ≥ 60 GB. Aplicar y reiniciar.
+2. **Liberar espacio**: `docker system prune -a --volumes` (¡borra todas las imágenes y volúmenes locales — confirma primero!).
+3. **Construir solo `api`** para aislar el problema: `docker compose build api`.
+4. **Salir de Docker para el backend**: usa la **Opción 2A** (uvicorn local + Postgres en Docker). Solo el contenedor `db` es ligero (~80 MB).
+
+### `connection refused` a Postgres en Opción 1
+
+Has dejado `DATABASE_URL=postgresql+psycopg://...` en `.env` pero estás en modo SQLite. Vacía la variable (`DATABASE_URL=`) o ponla a `sqlite:///./data/p6.db` y reinicia uvicorn.
+
+### `paddle` / `torch` no se importan tras la instalación
+
+Verifica que estás usando el Python del venv correcto:
+```bash
+.venv/Scripts/python.exe -c "import torch, paddleocr, langgraph, fastapi; print('OK')"
+```
+Si falta algo, reinstala: `uv pip install --python .venv/Scripts/python.exe --link-mode=copy -r requirements.txt`.
 
 ## Documentación adicional
 

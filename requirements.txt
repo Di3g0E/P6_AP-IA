@@ -67,7 +67,6 @@ nltk>=3.9.0
 cryptography>=41.0.0
 
 # --- Notifications (Telegram + WhatsApp opcional) ---
-pywhatkit>=5.4
 requests>=2.31.0
 
 # --- Utilities ---

@@ -46,6 +46,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
       - ./data:/app/data
       - ./logs:/app/logs
       - ./models:/app/models
