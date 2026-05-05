@@ -198,6 +198,55 @@ Con backend, ngrok y frontend arriba:
    - "Añade un gasto de 30€ en Food hoy."
 4. Las transacciones marcadas como anómalas por el agente Security aparecen en `/pending` para aprobar o rechazar.
 
+#### 3.7 — Rutina diaria (volver a levantar el backend en otro día)
+
+Una vez configurado todo (Supabase + ngrok + Vercel), cada sesión de uso solo requiere dos terminales abiertas en tu PC:
+
+**Terminal 1 — Backend**
+
+```powershell
+cd "C:\Users\diego\OneDrive - Universidad Rey Juan Carlos\Documentos\GIA_URJC\Curso 2025-26\Ap_IA\practicas\P6_AP-IA"
+.venv\Scripts\python.exe -m uvicorn src.api.main:app --port 8000
+```
+
+**Terminal 2 — Túnel ngrok**
+
+```powershell
+ngrok http 8000
+```
+
+Apunta la URL de la línea `Forwarding`.
+
+**Usar la app**: abre tu dominio Vercel (`https://<proyecto>.vercel.app`) → `/login`.
+
+##### Si la URL ngrok ha cambiado desde la última vez
+
+El plan free de ngrok asigna URL nueva cada arranque. Si `Forwarding` muestra una URL distinta a la que hay en Vercel:
+
+1. **Vercel → Settings → Environment Variables** → edita `NEXT_PUBLIC_API_BASE_URL` con la URL nueva.
+2. **Deployments → último → ⋯ → Redeploy** (sin caché).
+3. Espera 1-2 min y recarga `/login` con `Ctrl+Shift+R`.
+
+`CORS_ORIGINS` no hay que tocarlo (apunta a Vercel, no a ngrok).
+
+##### Solución definitiva: dominio ngrok estático gratis
+
+Para no perseguir URLs nunca más:
+
+1. https://dashboard.ngrok.com/cloud-edge/domains → **+ Create domain** (free incluye uno).
+2. Lanza el túnel anclado a ese dominio:
+   ```powershell
+   ngrok http --url=<tu-dominio>.ngrok-free.app 8000
+   ```
+3. Pon esa URL una vez en Vercel y se acabó la danza de redeploys.
+
+##### Cosas a recordar
+
+- **Cambias `.env` (CORS, claves, etc.)**: reinicia uvicorn (Ctrl+C + relanzar). FastAPI lee el `.env` solo al arrancar.
+- **Cambias código backend**: reinicia uvicorn (o usa `--reload` para autoreload en dev).
+- **Cambias código frontend**: push a GitHub, Vercel redeploya solo.
+- **Algo no funciona**: F12 en el navegador → Console → el primer error rojo dice qué falla (CORS, ngrok caído, JWT expirado, etc.).
+
 
 ## Modos de ejecución
 
