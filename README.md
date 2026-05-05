@@ -35,7 +35,7 @@ LLM:         Groq por defecto + plug-in OpenAI / Anthropic / Google AI Studio po
 Base datos:  Postgres 15 (Supabase free o local Docker)
 Memoria:     LangGraph PostgresSaver (thread_id = user:session)
 Logs:        JSON estructurado → tabla events + fichero rotado
-Túnel:       Cloudflare Tunnel (opcional, gratis)
+Túnel:       ngrok (gratis; Cloudflare Tunnel también soportado)
 Despliegue:  Docker Compose (imagen única, NumPy 1.26)
 ```
 
@@ -121,11 +121,82 @@ Esto levanta `db` (Postgres 15) + `api` (FastAPI) en la misma red Docker. La API
 > El `.env` debe tener `DATABASE_URL=postgresql+psycopg://app:app@db:5432/p6`
 > (la línea ya está en `.env.example`).
 
-### Opción 3 — Cloud gratuito (recomendado para demo)
+### Opción 3 — Cloud gratuito (recomendado para demo pública)
 
-- **Postgres**: [Supabase free](https://supabase.com) (500 MB, TDE en reposo).
-- **Frontend**: [Vercel free](https://vercel.com) (Next.js automático desde GitHub).
-- **Backend**: tu máquina local + [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (URL pública HTTPS gratis y estable).
+Combinación validada: **Supabase** (Postgres) + **ngrok** (URL pública para tu uvicorn local) + **Vercel** (frontend Next.js). Todo gratis, sin tarjeta.
+
+> El backend (con torch / paddleocr / facenet) **no cabe** en serverless. Vercel solo aloja el frontend; tu uvicorn sigue corriendo en tu PC y se expone vía un túnel HTTPS.
+
+#### 3.1 — Postgres en Supabase
+
+1. Crea cuenta en https://supabase.com → **New project**. Anota la **database password**.
+2. En el dashboard del proyecto, pulsa **Connect** (arriba) → bloque **Connection pooling** (puerto `6543`, modo *Transaction*). Copia la URI.
+3. En tu `.env`, prefija con `+psycopg`. **Sin comillas, sin `?pgbouncer=true`** (psycopg lo rechaza):
+   ```
+   DATABASE_URL=postgresql+psycopg://postgres.<ref>:<PASSWORD>@aws-1-<region>.pooler.supabase.com:6543/postgres
+   ```
+4. Inicializa tablas + usuario demo + migra el CSV:
+   ```bash
+   .venv/Scripts/python.exe scripts/init_db.py
+   ```
+   Espera `Migradas 887 transacciones del CSV al usuario demo.`
+
+#### 3.2 — Backend público con ngrok
+
+```bash
+winget install --id Ngrok.Ngrok
+# Authtoken (cuenta gratis en https://dashboard.ngrok.com)
+ngrok config add-authtoken <tu_authtoken>
+# Lanzar el tunel (deja la terminal abierta)
+ngrok http 8000
+```
+
+Apunta la URL `https://xxxx-xx.ngrok-free.dev` que aparece en `Forwarding`. Es la dirección pública del backend.
+
+> Plan free: la URL **cambia entre reinicios** y la primera visita en navegador muestra una pantalla azul (las llamadas API la saltan automáticamente con el header `ngrok-skip-browser-warning` que el frontend ya envía). Para una URL fija reclama un **dominio estático gratis** en `dashboard.ngrok.com → Domains` y lánzalo con `ngrok http --url=<tu-dominio>.ngrok-free.app 8000`.
+
+#### 3.3 — Frontend en Vercel
+
+1. Push del repo a GitHub si aún no está.
+2. https://vercel.com → **Sign up with GitHub** → **Add New → Project** → importa el repo.
+3. **Root Directory**: `frontend` (si tu repo es ya `P6_AP-IA`) o `P6_AP-IA/frontend` (en monorepo).
+4. **Environment Variables** → añade UNA:
+   - **Name**: `NEXT_PUBLIC_API_BASE_URL`
+   - **Value**: la URL ngrok del paso 3.2 (sin barra final).
+5. **Deploy**. En **Settings → Domains** verás el dominio Production estable (`<proyecto>.vercel.app`); úsalo, **no** el preview con hash que cambia con cada push.
+
+#### 3.4 — CORS y reinicio de uvicorn
+
+En `.env` del backend:
+```
+CORS_ORIGINS=http://localhost:3000,https://<proyecto>.vercel.app
+```
+**Reinicia uvicorn** (Ctrl+C + relanzar) para que recargue: FastAPI lee `CORS_ORIGINS` solo al arrancar. Sin esto, el navegador bloquea por CORS.
+
+#### 3.5 — Cargar datos del CSV en una cuenta real
+
+`init_db.py` migra el CSV al usuario demo (UUID fijo, sin biometría → no accesible vía web). Para que un usuario registrado por la web vea esos datos:
+
+```bash
+.venv/Scripts/python.exe scripts/transfer_demo_data.py <email_del_usuario>
+```
+
+Borra las transacciones existentes del destino y reasigna las del demo. Idempotente: vuelve a lanzar `init_db.py` para recargar el demo, y `transfer_demo_data.py` para preparar otra cuenta.
+
+> **Privacidad**: los datos viajan Vercel → ngrok → tu máquina → Supabase, todo sobre HTTPS. La biometría se cifra con Fernet en aplicación antes de tocar Postgres.
+
+#### 3.6 — Probar la demo
+
+Con backend, ngrok y frontend arriba:
+
+1. Abre tu dominio Vercel → `/register`. Crea un usuario con webcam + email + passphrase.
+2. (Opcional) Carga el CSV en esa cuenta: `.venv/Scripts/python.exe scripts/transfer_demo_data.py <email>`.
+3. Ve a `/login`, autentícate y prueba en `/chat`:
+   - "Resume mis gastos del último mes."
+   - "¿Cuál es la predicción de mis gastos para el mes que viene?"
+   - "Analiza la tendencia de mis gastos en Leisure de los últimos 6 meses."
+   - "Añade un gasto de 30€ en Food hoy."
+4. Las transacciones marcadas como anómalas por el agente Security aparecen en `/pending` para aprobar o rechazar.
 
 
 ## Modos de ejecución
@@ -247,7 +318,7 @@ Cada usuario decide su `notification_level`:
 - Endpoint `DELETE /me` con cascade que purga embedding + transacciones + objetivos + eventos del usuario.
 - Endpoint `GET /me/export` que genera un ZIP con todos los datos del usuario.
 - Logs sin PII en claro: la tabla `events` solo guarda IDs/hashes y metadatos.
-- TLS obligatorio en producción (provisto por Cloudflare Tunnel o Vercel).
+- TLS obligatorio en producción (provisto por el túnel ngrok / Cloudflare y por Vercel).
 
 ## Documentación adicional
 
