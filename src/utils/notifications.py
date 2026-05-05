@@ -17,13 +17,14 @@ Origen: P5_AP-IA/src/utils/notification_service.py — adaptado para P6:
 
 from __future__ import annotations
 
-import os
 import time
 from dataclasses import dataclass
 from typing import Literal, Optional
 
 import requests
 from loguru import logger
+
+from src.utils.config import settings
 
 try:
     import pywhatkit
@@ -207,12 +208,7 @@ def notify(config: UserNotificationConfig, action: str, success: bool = True, **
                                        success=success, **kwargs)
 
     # 1. Telegram (canal primario)
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not bot_token:
-        # Solución temporal: usar el token directamente
-        bot_token = "8683693899:AAGbrUfwHKmulhblkjdNpgZRjoFHJVNEgwo"
-        logger.info("Usando token de Telegram configurado directamente")
-    
+    bot_token = settings.telegram_bot_token
     if bot_token and config.telegram_chat_id:
         TelegramService(bot_token, config.telegram_chat_id).send_message(message)
         logger.info(f"Notificación enviada a {config.telegram_chat_id}")
