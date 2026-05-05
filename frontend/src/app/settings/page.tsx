@@ -31,13 +31,14 @@ export default function SettingsPage() {
 
   const loadSettings = async () => {
     try {
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem("token");
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/user/settings`, {
         headers: {
           "Authorization": `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "true",
         },
       });
-      
+
       if (response.ok) {
         const settings = await response.json();
         setNotificationsEnabled(settings.notifications_enabled || false);
@@ -55,12 +56,13 @@ export default function SettingsPage() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem("token");
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/user/settings`, {
         method: "PUT",
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
         },
         body: JSON.stringify({
           notifications_enabled: notificationsEnabled,
@@ -74,7 +76,7 @@ export default function SettingsPage() {
       }
 
       setSuccess("Configuración guardada correctamente");
-      
+
       // Si se activaron las notificaciones, enviar una de prueba
       if (notificationsEnabled && telegramChatId) {
         await testNotification();
@@ -88,11 +90,12 @@ export default function SettingsPage() {
 
   const testNotification = async () => {
     try {
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem("token");
       await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/user/test-notification`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "true",
         },
       });
     } catch (err) {
