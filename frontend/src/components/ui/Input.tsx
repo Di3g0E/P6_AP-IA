@@ -40,8 +40,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             className={cn(
               baseStyles,
               variants[variant],
-              icon && "pl-10",
-              error && "border-red-500 focus:border-red-500 focus:ring-red-500/20",
+              icon ? "pl-10" : null,
+              error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : null,
               className
             )}
             ref={ref}
