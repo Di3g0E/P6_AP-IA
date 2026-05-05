@@ -80,6 +80,8 @@ async function authedFetch(path: string, init: RequestInit = {}): Promise<Respon
   if (!headers.has("Content-Type") && init.body && typeof init.body === "string") {
     headers.set("Content-Type", "application/json");
   }
+  // Evita la pagina de advertencia de ngrok-free en peticiones cross-origin.
+  headers.set("ngrok-skip-browser-warning", "true");
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (res.status === 401) {
     clearToken();
@@ -119,6 +121,7 @@ export async function register(
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
     body: fd,
+    headers: { "ngrok-skip-browser-warning": "true" },
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -142,6 +145,7 @@ export async function login(
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     body: fd,
+    headers: { "ngrok-skip-browser-warning": "true" },
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
