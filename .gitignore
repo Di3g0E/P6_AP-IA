@@ -45,3 +45,4 @@ data/*.sqlite3
 # Documentos
 doc/main.tex
 doc/
+!doc/main.pdf

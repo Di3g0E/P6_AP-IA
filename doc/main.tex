@@ -1,133 +1,155 @@
 \documentclass[a4paper,12pt,twoside]{article}
 
-% Paquetes básicos
+% --- Paquetes básicos ---
 \usepackage[utf8]{inputenc}
-\usepackage[spanish]{babel}
-\usepackage{graphicx}
-\usepackage{geometry}
+\usepackage[spanish, es-noshorthands]{babel}
 \usepackage{hyperref}
-\usepackage{fancyhdr}
-\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{amsmath, amsfonts, amssymb}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage[a4paper, top=2cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{csquotes}
+\usepackage[style=ieee, backend=biber]{biblatex}
+\addbibresource{references.bib}
+\usepackage{placeins}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, fit, backgrounds, babel}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
 
-% Márgenes y geometría
-\geometry{a4paper, margin=2.5cm}
+% --- Configuración de listings para Python ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.97}
 
-% Configuración del estilo de página
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[LE,RO]{\thepage}
-\fancyhead[RE,LO]{Memoria de la Práctica}
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen}\itshape,
+    keywordstyle=\color{blue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    frame=single,
+    rulecolor=\color{gray!40},
+    language=Python
+}
 
-% Redefinir cleardoublepage para asegurar página en blanco sin numeración
+% --- Evitar que los floats crucen subsecciones ---
+\makeatletter
+\AtBeginDocument{%
+  \let\origsubsection\subsection
+  \renewcommand{\subsection}{\FloatBarrier\origsubsection}%
+}
+\makeatother
+
+% --- Asegurar texto justificado (por defecto en LaTeX) ---
+\tolerance=1
+\emergencystretch=\maxdimen
+\hyphenpenalty=10000
+\hbadness=10000
+
+% --- Redefinir \cleardoublepage para que las páginas en blanco no lleven número ---
 \makeatletter
 \def\cleardoublepage{\clearpage\if@twoside \ifodd\c@page\else
-    \hbox{}
-    \vspace*{\fill}
-    \begin{center}
-       % Opcional: \textit{Página intencionadamente en blanco}
-    \end{center}
-    \vspace{\fill}
-    \thispagestyle{empty}
-    \newpage
-    \if@twocolumn\hbox{}\newpage\fi\fi\fi}
+    \thispagestyle{empty}%
+    \hbox{}\newpage\if@twocolumn\hbox{}\newpage\fi\fi\fi}
 \makeatother
+
+% --- Comando para páginas en blanco sin numeración ---
+\newcommand{\blankpage}{%
+    \newpage
+    \thispagestyle{empty}
+    \mbox{}
+    \newpage
+}
+
+\title{\Huge \textbf{Práctica 6: Sistema Multiagente Unificado de Gestión Financiera Personal}}
+\author{Diego Esclarín \and Sofía Contreras}
+\date{\today}
 
 \begin{document}
 
-% ==============================================
-% PÁGINA 1: PORTADA
-% ==============================================
+% --- Página 1: Portada (Interna -1) ---
 \begin{titlepage}
-    \thispagestyle{empty} % Ocultar numeración en portada
-    \begin{center}
-        \vspace*{2cm}
-        
-        % Logo URJC
-        % \includegraphics[width=0.6\textwidth]{logo_urjc.png} \\ % Sustituir por la ruta real del logo
-        
-        \vspace{2cm}
-        
-        \Huge \textbf{Práctica 6} \\
-        \vspace{0.5cm}
-        \Large \textbf{Asignatura: Inteligencia Artificial}
-        
-        \vspace{3cm}
-        
-        \Large \textbf{Autores:} \\
-        \vspace{0.5cm}
-        Nombre del Estudiante 1 - DNI: XXXXXXXX-X \\
-        Nombre del Estudiante 2 - DNI: XXXXXXXX-X \\ % Añadir o quitar autores según corresponda
-        
-        \vspace{3cm}
-        
-        \Large \textbf{Universidad Rey Juan Carlos} \\
-        \large Grado en Ingeniería Informática \\
-        \large Curso 2025-26
-        
-    \end{center}
-\end{titlepage}
-% ==============================================
+    \thispagestyle{empty}
+    \centering
+    \vspace*{1cm}
 
-% Reiniciar contador de páginas internamente DESPUÉS de la portada
-% Así la página en blanco siguiente es la 0, y el índice la 1
+    {\Huge \textbf{Práctica 6: Sistema Multiagente Unificado de Gestión Financiera Personal} \par}
+    \vspace{1.5cm}
+
+    \begin{figure}[h]
+        \centering
+        \includegraphics[width=0.6\textwidth]{figures/Logo_URJC.png}
+    \end{figure}
+
+    \vfill
+
+    {\large \textbf{Autores:} \par}
+    \vspace{0.3cm}
+    {\large Diego Esclarín (51729611N) \par}
+    {\large Sofía Contreras (09848471D) \par}
+
+    \vspace{1.5cm}
+
+    {\large Aplicaciones de Inteligencia Artificial \par}
+    {\large Grado en Ingeniería en Inteligencia Artificial \par}
+    {\large Universidad Rey Juan Carlos \par}
+    {\large Curso 2025--26 \par}
+
+\end{titlepage}
 \setcounter{page}{0}
 
-% ==============================================
-% PÁGINA 2: EN BLANCO (Manejada por twoside y cleardoublepage)
-% ==============================================
-\cleardoublepage
+% --- Página 2: Blanco (Interna 0) ---
+\blankpage
 
-% ==============================================
-% PÁGINA 3: ÍNDICE
-% ==============================================
-\thispagestyle{empty} % Ocultar numeración en índice
+% --- Índices ---
+\thispagestyle{empty}
 \tableofcontents
-
-% Si hay 5 o más figuras, se debe descomentar esto:
-% \listoffigures
-
 \cleardoublepage
 
-% ==============================================
-% SECCIONES OBLIGATORIAS (Cada una comienza en impar)
-% ==============================================
-
-% La numeración visible empieza a partir de la Introducción
-\pagestyle{fancy}
-
-\section{Introducción}
-% Normalmente de media página a una página completa.
-Aquí comienza la introducción de la práctica. Explicar brevemente el problema a resolver y los objetivos propuestos.
-
+\thispagestyle{empty}
+\listoffigures
 \cleardoublepage
 
-\section{Contexto}
-Descripción del entorno de trabajo, herramientas utilizadas y bases teóricas de la práctica.
+% --- Página 5: Inicio del contenido ---
+\pagestyle{plain}
 
+\input{sections/1_introduccion}
 \cleardoublepage
 
-\section{Estado del Arte}
-Investigación y análisis de aproximaciones existentes, posibles soluciones y alternativas tecnológicas.
-
+\input{sections/2_contexto}
 \cleardoublepage
 
-\section{Propuesta}
-Explicación detallada de la arquitectura, diseño e implementación realizada para resolver el problema.
-Se puede dividir en subsecciones si es necesario.
-
+\input{sections/3_estado_arte}
 \cleardoublepage
 
-\section{Conclusiones}
-% Normalmente de media página a una página completa.
-Resumen de los resultados obtenidos, dificultades encontradas y posibles mejoras futuras.
-
+\input{sections/4_propuesta}
 \cleardoublepage
 
-% ==============================================
-% REFERENCIAS
-% ==============================================
-\begin{thebibliography}{9}
-\bibitem{ref1} Autor. \textit{Título}. Editorial, Año.
-\end{thebibliography}
+\input{sections/5_conclusiones}
+
+% --- Referencias en página impar ---
+\cleardoublepage
+\printbibliography[title={Referencias Bibliográficas}]
 
 \end{document}
