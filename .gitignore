@@ -46,5 +46,6 @@ data/*.sqlite3
 doc/main.tex
 doc/
 !doc/main.pdf
-
+!doc/figures/**.png
+!doc/figures/**.tex
 !doc/factura3.jpg
