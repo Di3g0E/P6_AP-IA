@@ -25,7 +25,10 @@ data/external/*
 !data/external/.gitkeep
 
 # Logs
-# logs/*.log
+logs/*.log
+
+# Datos biometricos cifrados (PII, no deben viajar al repo)
+data/face_embeddings.bin
 
 # Bases de datos locales (SQLite de dev)
 data/*.db
