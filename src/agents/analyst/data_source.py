@@ -14,14 +14,17 @@ Las dos funciones devuelven un DataFrame compatible con `analytics.py`.
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.data.schema import Transaction
+from src.agents.contracts import Goal as GoalContract
+from src.data.schema import Goal as GoalRow, Transaction
 
 
 # Path al CSV de demo (mismo que usa init_db.py)
@@ -189,3 +192,137 @@ def load_user_transactions(user_id: str) -> pd.DataFrame:
         logger.warning(f"Lectura de BD falló, fallback a CSV: {e}")
 
     return _safe_csv_fallback()
+
+
+# Helpers de objetivos (tabla `goals`)
+
+def _row_to_contract(row: GoalRow) -> GoalContract:
+    return GoalContract(
+        id=str(row.id),
+        user_id=str(row.user_id),
+        area=row.area,
+        max_amount=row.max_amount,
+        period=row.period,           # type: ignore[arg-type]
+        active=row.active,
+    )
+
+
+def load_user_goals(user_id: str, *, only_active: bool = True) -> list[GoalContract]:
+    """
+    Devuelve los objetivos del usuario desde la tabla `goals`.
+
+    Si la BD no está configurada, el `user_id` no es UUID válido o falla la
+    consulta, devuelve una lista vacía (los llamadores deben tolerarlo).
+    """
+    try:
+        from src.data.database import get_session, is_database_configured
+    except Exception as e:
+        logger.debug(f"BD no importable para load_user_goals: {e}")
+        return []
+
+    if not is_database_configured() or not user_id:
+        return []
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return []
+
+    try:
+        with get_session() as session:
+            stmt = select(GoalRow).where(GoalRow.user_id == user_uuid)
+            if only_active:
+                stmt = stmt.where(GoalRow.active.is_(True))
+            rows = session.execute(stmt).scalars().all()
+            return [_row_to_contract(r) for r in rows]
+    except Exception as e:
+        logger.warning(f"load_user_goals falló: {e}")
+        return []
+
+
+def upsert_user_goal(
+    user_id: str, area: str, max_amount, period: str = "monthly",
+) -> Optional[GoalContract]:
+    """
+    Crea o actualiza el objetivo (user_id, area). Semántica P4: hay como
+    máximo un objetivo activo por (user_id, area); si ya existe, se sobreescribe.
+
+    Devuelve el `Goal` resultante, o None si la BD no está disponible.
+    """
+    try:
+        from src.data.database import get_session, is_database_configured
+    except Exception as e:
+        logger.debug(f"BD no importable para upsert_user_goal: {e}")
+        return None
+
+    if not is_database_configured():
+        return None
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return None
+
+    try:
+        with get_session() as session:
+            existing = session.execute(
+                select(GoalRow)
+                .where(GoalRow.user_id == user_uuid)
+                .where(GoalRow.area == area)
+                .where(GoalRow.active.is_(True))
+            ).scalar_one_or_none()
+
+            if existing is not None:
+                existing.max_amount = Decimal(str(max_amount))
+                existing.period = period
+                row = existing
+            else:
+                row = GoalRow(
+                    user_id=user_uuid,
+                    area=area,
+                    max_amount=Decimal(str(max_amount)),
+                    period=period,
+                    active=True,
+                )
+                session.add(row)
+            session.flush()
+            return _row_to_contract(row)
+    except Exception as e:
+        logger.warning(f"upsert_user_goal falló: {e}")
+        return None
+
+
+def delete_user_goal(user_id: str, area: str) -> bool:
+    """
+    Marca como inactivo el objetivo (user_id, area). Soft-delete: conserva
+    histórico para auditoría. Devuelve True si se borró alguno.
+    """
+    try:
+        from src.data.database import get_session, is_database_configured
+    except Exception as e:
+        logger.debug(f"BD no importable para delete_user_goal: {e}")
+        return False
+
+    if not is_database_configured():
+        return False
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return False
+
+    try:
+        with get_session() as session:
+            existing = session.execute(
+                select(GoalRow)
+                .where(GoalRow.user_id == user_uuid)
+                .where(GoalRow.area == area)
+                .where(GoalRow.active.is_(True))
+            ).scalar_one_or_none()
+            if existing is None:
+                return False
+            existing.active = False
+            return True
+    except Exception as e:
+        logger.warning(f"delete_user_goal falló: {e}")
+        return False

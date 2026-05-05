@@ -91,7 +91,7 @@ def init_db() -> None:
 
 @contextmanager
 def get_session() -> Iterator[Session]:
-    """Context manager para una sesión transaccional."""
+    """Context manager para uso manual con 'with get_session() as session:'."""
     if _SessionLocal is None:
         get_engine()
     assert _SessionLocal is not None
@@ -109,21 +109,7 @@ def get_session() -> Iterator[Session]:
 def get_db() -> Iterator[Session]:
     """
     Dependency de FastAPI: generador puro (sin @contextmanager) que cede una
-    sesión y la cierra al terminar la request. Si el handler lanza, hace
-    rollback; si no, commit.
-
-    `get_session` (con @contextmanager) sirve para `with ... as` en código
-    síncrono; FastAPI necesita un generador directo para `Depends(...)`.
+    sesión y la cierra al terminar la request.
     """
-    if _SessionLocal is None:
-        get_engine()
-    assert _SessionLocal is not None
-    session: Session = _SessionLocal()
-    try:
+    with get_session() as session:
         yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()

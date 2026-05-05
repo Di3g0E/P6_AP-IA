@@ -174,16 +174,22 @@ def _safe_kwargs(func, args: dict) -> dict:
     return {k: v for k, v in args.items() if k in accepted}
 
 
+# Cada handler recibe (df, args, user_id). Las ops puramente analíticas
+# ignoran user_id; las de objetivos lo necesitan para leer/escribir su tabla.
 _ANALYST_OPS = {
-    "monthly_summary":    lambda df, args: analyst.monthly_summary(df, **_safe_kwargs(analyst.monthly_summary, args)),
-    "category_breakdown": lambda df, args: analyst.category_breakdown(df, **_safe_kwargs(analyst.category_breakdown, args)),
-    "spending_trends":    lambda df, args: analyst.spending_trends(df, **_safe_kwargs(analyst.spending_trends, args)),
-    "savings_rate":       lambda df, args: analyst.savings_rate(df, **_safe_kwargs(analyst.savings_rate, args)),
-    "detect_anomalies":   lambda df, args: analyst.detect_anomalies(df),
-    "recurring_expenses": lambda df, args: analyst.recurring_expenses(df),
-    "recent_transactions": lambda df, args: analyst.recent_transactions(df, **_safe_kwargs(analyst.recent_transactions, args)),
-    "predict_next_month": lambda df, args: analyst.predict_next_month(df, **_safe_kwargs(analyst.predict_next_month, args)),
-    "check_goals":        lambda df, args: analyst.check_goals(df, goals=args.get("goals", [])),
+    "monthly_summary":    lambda df, args, user_id: analyst.monthly_summary(df, **_safe_kwargs(analyst.monthly_summary, args)),
+    "category_breakdown": lambda df, args, user_id: analyst.category_breakdown(df, **_safe_kwargs(analyst.category_breakdown, args)),
+    "spending_trends":    lambda df, args, user_id: analyst.spending_trends(df, **_safe_kwargs(analyst.spending_trends, args)),
+    "savings_rate":       lambda df, args, user_id: analyst.savings_rate(df, **_safe_kwargs(analyst.savings_rate, args)),
+    "detect_anomalies":   lambda df, args, user_id: analyst.detect_anomalies(df),
+    "recurring_expenses": lambda df, args, user_id: analyst.recurring_expenses(df),
+    "recent_transactions": lambda df, args, user_id: analyst.recent_transactions(df, **_safe_kwargs(analyst.recent_transactions, args)),
+    "predict_next_month": lambda df, args, user_id: analyst.predict_next_month(df, **_safe_kwargs(analyst.predict_next_month, args)),
+    # Objetivos: si el LLM no pasa goals, check_goals los carga de BD por user_id.
+    "check_goals":        lambda df, args, user_id: analyst.check_goals(df, goals=args.get("goals"), user_id=user_id),
+    "set_goal":           lambda df, args, user_id: analyst.set_goal(user_id, **_safe_kwargs(analyst.set_goal, args)),
+    "list_goals":         lambda df, args, user_id: analyst.list_goals(user_id),
+    "remove_goal":        lambda df, args, user_id: analyst.remove_goal(user_id, **_safe_kwargs(analyst.remove_goal, args)),
 }
 
 
@@ -209,8 +215,11 @@ def analyst_node(state: OrchestratorState) -> dict:
             sw.payload["error"] = "unknown_op"
         else:
             try:
+                # Las ops de gestión de objetivos no necesitan el DataFrame,
+                # pero cargarlo es barato (cache) y mantener la firma uniforme
+                # simplifica el dispatcher.
                 df = _load_user_dataframe(user_id)
-                report = handler(df, args)
+                report = handler(df, args, user_id)
             except Exception as e:
                 logger.exception(f"Analyst {op} falló: {e}")
                 report = AnalysisReport(type="summary",

@@ -74,7 +74,16 @@ Operaciones para `delegate_analyst` (rellena `target_op` y `target_args`):
   "qué he añadido hoy", "lista mis últimos gastos".
 - `predict_next_month(area?, method?)` — predicción del próximo mes
   (`method` ∈ {'rf','hgb','arima'}, default 'rf').
-- `check_goals()` — estado de los objetivos del usuario.
+- `check_goals()` — evalúa los objetivos activos contra el gasto del mes en
+  curso y lista los que están en alerta (>=80% del límite). Sin args.
+- `set_goal(area, max_amount, period?)` — crea o actualiza un objetivo de
+  gasto máximo para una categoría. `area` es el nombre de la categoría
+  (ej. 'Leisure', 'Restauración'); `max_amount` es el límite en EUR
+  (numérico); `period` ∈ {'monthly','weekly'}, default 'monthly'.
+  Si ya existe un objetivo activo para ese `area`, se sobrescribe.
+- `list_goals()` — lista todos los objetivos activos del usuario.
+- `remove_goal(area)` — elimina (soft-delete) el objetivo activo de un
+  `area`.
 
 REGLAS:
 - Cuando elijas `delegate_X`, deja `user_message` VACÍO. La narración la haré yo

@@ -13,17 +13,23 @@ Operaciones (ver doc/agent_contracts.md):
   - recurring_expenses
   - predict_next_month
   - check_goals  (dispara `notify_goal_threshold` si pct >= 0.80)
+  - set_goal     (crea/actualiza un objetivo activo en BD)
+  - list_goals   (lista los objetivos activos del usuario)
+  - remove_goal  (soft-delete del objetivo activo de un area)
 """
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 import pandas as pd
 from loguru import logger
 
 from src.agents.analyst import analytics, forecasters
+from src.agents.analyst.data_source import (
+    delete_user_goal, load_user_goals, upsert_user_goal,
+)
 from src.agents.contracts import (
     AnalysisReport, DataPoint, Goal, GoalAlert,
 )
@@ -158,17 +164,23 @@ def predict_next_month(df: pd.DataFrame, area: Optional[str] = None,
 
 def check_goals(
     df: pd.DataFrame,
-    goals: list[Goal],
+    goals: Optional[list[Goal]] = None,
     notif_config: Optional[UserNotificationConfig] = None,
+    user_id: Optional[str] = None,
 ) -> AnalysisReport:
     """Evalúa cada objetivo activo y dispara notificación si pct >= 0.80.
 
     Args:
         df: transacciones del usuario.
-        goals: lista de objetivos activos.
+        goals: lista de objetivos activos. Si es None y se proporciona
+            `user_id`, se cargan automáticamente desde la BD.
         notif_config: si se proporciona, se envía `notify_goal_threshold`
             por cada objetivo que supere el umbral.
+        user_id: necesario si `goals` es None — para cargarlos de BD.
     """
+    if goals is None:
+        goals = load_user_goals(user_id) if user_id else []
+
     alerts: list[GoalAlert] = []
 
     for g in goals:
@@ -212,4 +224,79 @@ def check_goals(
         type="goal_status",
         metrics={"alerts_count": len(alerts), "goals_evaluated": len(goals)},
         goal_alerts=alerts,
+    )
+
+
+# CRUD de objetivos — semántica P4 portada a la BD de P6.
+
+def set_goal(
+    user_id: str,
+    area: str,
+    max_amount,
+    period: str = "monthly",
+) -> AnalysisReport:
+    """Crea o actualiza un objetivo activo para (user_id, area).
+
+    Si ya existe uno activo para ese area, se sobrescribe (upsert).
+    """
+    if not user_id or not area:
+        return AnalysisReport(type="goal_status",
+                              metrics={"action": "set", "error": "missing_args"})
+    try:
+        amount_dec = Decimal(str(max_amount))
+    except (InvalidOperation, ValueError, TypeError):
+        return AnalysisReport(type="goal_status",
+                              metrics={"action": "set", "error": "invalid_amount",
+                                       "raw_amount": str(max_amount)})
+    if amount_dec <= 0:
+        return AnalysisReport(type="goal_status",
+                              metrics={"action": "set", "error": "non_positive_amount"})
+    if period not in ("monthly", "weekly"):
+        period = "monthly"
+
+    goal = upsert_user_goal(user_id, area=area, max_amount=amount_dec, period=period)
+    if goal is None:
+        return AnalysisReport(type="goal_status",
+                              metrics={"action": "set", "error": "db_unavailable"})
+
+    return AnalysisReport(
+        type="goal_status",
+        metrics={
+            "action": "set",
+            "area": goal.area,
+            "max_amount": float(goal.max_amount),
+            "period": goal.period,
+        },
+    )
+
+
+def list_goals(user_id: str) -> AnalysisReport:
+    """Lista los objetivos activos del usuario."""
+    goals = load_user_goals(user_id) if user_id else []
+    return AnalysisReport(
+        type="goal_status",
+        metrics={
+            "action": "list",
+            "count": len(goals),
+            "goals": [
+                {
+                    "area": g.area,
+                    "max_amount": float(g.max_amount),
+                    "period": g.period,
+                }
+                for g in goals
+            ],
+        },
+    )
+
+
+def remove_goal(user_id: str, area: str) -> AnalysisReport:
+    """Soft-delete del objetivo activo para (user_id, area)."""
+    if not user_id or not area:
+        return AnalysisReport(type="goal_status",
+                              metrics={"action": "remove", "error": "missing_args"})
+    removed = delete_user_goal(user_id, area=area)
+    return AnalysisReport(
+        type="goal_status",
+        metrics={"action": "remove", "area": area, "removed": removed},
     )

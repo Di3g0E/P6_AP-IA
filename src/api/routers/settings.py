@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
