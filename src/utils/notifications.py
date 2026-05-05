@@ -25,8 +25,12 @@ from typing import Literal, Optional
 import requests
 from loguru import logger
 
-# pywhatkit eliminado por incompatibilidad con Docker headless (requiere GUI)
-PYWHATKIT_AVAILABLE = False
+try:
+    import pywhatkit
+    PYWHATKIT_AVAILABLE = True
+except ImportError:
+    PYWHATKIT_AVAILABLE = False
+    logger.warning("pywhatkit no instalado — WhatsApp deshabilitado")
 
 
 NotificationLevel = Literal["redacted", "full"]
@@ -38,6 +42,7 @@ class UserNotificationConfig:
     user_id: str
     notifications_enabled: bool = False
     telegram_chat_id: Optional[str] = None
+    whatsapp_phone: Optional[str] = None      # formato internacional, ej. +34600000000
     notification_level: NotificationLevel = "redacted"
 
 
@@ -64,6 +69,30 @@ class TelegramService:
             return True
         except Exception as e:
             logger.error(f"Telegram error: {e}")
+            return False
+
+
+class WhatsAppService:
+    """WhatsApp Web vía pywhatkit. Best-effort: requiere sesión activa de WhatsApp Web."""
+
+    def __init__(self, phone_number: str):
+        if not PYWHATKIT_AVAILABLE:
+            raise ImportError("pywhatkit no disponible")
+        self.phone_number = phone_number
+
+    def send_message(self, message: str, wait_time: int = 15) -> bool:
+        try:
+            pywhatkit.sendwhatmsg_instantly(
+                phone_no=self.phone_number,
+                message=message,
+                wait_time=wait_time,
+                tab_close=True,
+                close_time=3,
+            )
+            logger.info(f"WhatsApp → {self.phone_number} OK")
+            return True
+        except Exception as e:
+            logger.error(f"WhatsApp error: {e}")
             return False
 
 
@@ -161,7 +190,7 @@ def get_notification_message(
 
 def notify(config: UserNotificationConfig, action: str, success: bool = True, **kwargs) -> None:
     """
-    Envía la notificación al usuario por Telegram.
+    Envía la notificación al usuario por todos los canales que tenga configurados.
 
     Args:
         config: configuración del usuario (de tabla user_settings).
@@ -177,13 +206,26 @@ def notify(config: UserNotificationConfig, action: str, success: bool = True, **
     message = get_notification_message(action, level=config.notification_level,
                                        success=success, **kwargs)
 
-    # Telegram (canal primario)
+    # 1. Telegram (canal primario)
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        # Solución temporal: usar el token directamente
+        bot_token = "8683693899:AAGbrUfwHKmulhblkjdNpgZRjoFHJVNEgwo"
+        logger.info("Usando token de Telegram configurado directamente")
+    
     if bot_token and config.telegram_chat_id:
         TelegramService(bot_token, config.telegram_chat_id).send_message(message)
         logger.info(f"Notificación enviada a {config.telegram_chat_id}")
     elif config.telegram_chat_id and not bot_token:
         logger.warning("TELEGRAM_BOT_TOKEN no configurado en el servidor")
+
+    # 2. WhatsApp (canal secundario, best-effort)
+    if config.whatsapp_phone and PYWHATKIT_AVAILABLE:
+        plain_message = message.replace("*", "").replace("`", "")
+        try:
+            WhatsAppService(config.whatsapp_phone).send_message(plain_message)
+        except Exception as e:
+            logger.warning(f"WhatsApp falló para {config.user_id}: {e}")
 
 
 # Helpers de alto nivel (uno por trigger del sistema)
