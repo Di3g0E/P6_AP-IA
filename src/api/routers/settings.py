@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user_id
-from src.data.database import get_session
+from src.data.database import get_db
 from src.data.schema import UserSettings
 from src.utils.notifications import notify, UserNotificationConfig
 
@@ -54,7 +54,7 @@ class SettingsResponse(BaseModel):
 @router.get("/settings", response_model=SettingsResponse)
 async def get_settings(
     user_id: str = Depends(get_current_user_id),
-    db: Session = Depends(get_session)
+    db: Session = Depends(get_db)
 ) -> SettingsResponse:
     """Obtiene la configuración actual del usuario."""
     try:
@@ -89,7 +89,7 @@ async def get_settings(
 async def update_settings(
     settings_update: SettingsUpdate,
     user_id: str = Depends(get_current_user_id),
-    db: Session = Depends(get_session)
+    db: Session = Depends(get_db)
 ) -> SettingsResponse:
     """Actualiza la configuración del usuario."""
     logger.info(f"Actualizando settings para user_id: {user_id}")
@@ -133,7 +133,7 @@ async def update_settings(
 @router.post("/test-notification")
 async def test_notification(
     user_id: str = Depends(get_current_user_id),
-    db: Session = Depends(get_session)
+    db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Envía una notificación de prueba al usuario."""
     try:
