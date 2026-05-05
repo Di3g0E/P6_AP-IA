@@ -34,8 +34,8 @@ import numpy as np
 from loguru import logger
 
 from src.agents.contracts import (
-    ImageUpload, ManualEntry, RegistryResult, RejectedItem, ReviewItem,
-    TransactionDraft, TransactionRecord,
+    ExtractedTransaction, ImageUpload, ManualEntry, OCRExtractResult,
+    RegistryResult, RejectedItem, ReviewItem, TransactionDraft, TransactionRecord,
 )
 from src.agents.registrar.classifier import FinancialClassifier
 from src.agents.registrar.ocr_engine import OCRTotalExtractor
@@ -247,6 +247,40 @@ def add_from_image(upload: ImageUpload) -> RegistryResult:
 
     record = _persist(draft, status="accepted")
     return RegistryResult(accepted=[record])
+
+
+def extract_from_image(upload: ImageUpload) -> OCRExtractResult:
+    """
+    OCR-only: extrae el total de la imagen y sugiere descripción/área/fecha,
+    pero NO persiste. La UI muestra los valores al usuario, este los confirma
+    o edita, y luego se crea la transacción vía `add_manual_transaction`.
+    """
+    try:
+        image_array = _decode_image(upload.image)
+    except Exception as e:
+        logger.error(f"No se pudo decodificar la imagen: {e}")
+        return OCRExtractResult(reason="Imagen inválida o corrupta")
+
+    try:
+        total = OCRTotalExtractor.shared().extract_total_from_image(image_array)
+    except Exception as e:
+        logger.exception(f"OCR falló: {e}")
+        return OCRExtractResult(reason=f"OCR falló: {type(e).__name__}")
+
+    if total is None:
+        return OCRExtractResult(
+            reason="No se pudo extraer un total de la imagen",
+        )
+
+    description = upload.description_hint or "Compra (extraída de imagen)"
+    extracted = ExtractedTransaction(
+        amount=Decimal(str(round(total, 2))),
+        description_suggested=description,
+        date_suggested=upload.date_hint or datetime.now(timezone.utc).date(),
+        area_suggested=_classify_area(description),
+        type_suggested="Expenses",
+    )
+    return OCRExtractResult(extracted=extracted)
 
 
 # Operaciones de revisión de transacciones pendientes

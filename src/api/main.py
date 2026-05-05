@@ -9,6 +9,7 @@ Endpoints expuestos en v1:
   - POST   /auth/login
   - POST   /chat
   - POST   /transactions
+  - POST   /transactions/ocr-extract
   - GET    /transactions/pending
   - POST   /transactions/pending/{id}/confirm
   - DELETE /transactions/pending/{id}

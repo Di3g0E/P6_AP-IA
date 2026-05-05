@@ -120,6 +120,25 @@ class RegistryResult(BaseModel):
     rejected: list[RejectedItem] = Field(default_factory=list)
 
 
+class ExtractedTransaction(BaseModel):
+    """
+    Borrador extraído por OCR pero **sin persistir**: el usuario lo revisa
+    y confirma/edita antes de que se cree la transacción real.
+    """
+    amount: Decimal
+    description_suggested: str
+    date_suggested: date
+    area_suggested: list[str] = Field(default_factory=list)
+    type_suggested: TransactionType = "Expenses"
+    currency: str = "EUR"
+
+
+class OCRExtractResult(BaseModel):
+    """Resultado de un intento de extracción OCR."""
+    extracted: Optional[ExtractedTransaction] = None
+    reason: Optional[str] = None  # mensaje si extracted is None
+
+
 # Agente Analyst
 
 class DataPoint(BaseModel):

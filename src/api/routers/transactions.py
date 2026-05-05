@@ -16,12 +16,16 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
-from src.agents.contracts import ManualEntry
+from src.agents.contracts import ImageUpload, ManualEntry
 from src.agents.registrar import agent as registrar
 from src.api.dependencies import get_current_user_id
+
+
+_ALLOWED_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -61,6 +65,16 @@ class ManualTransactionResponse(BaseModel):
     accepted: list[TransactionRecordOut] = []
     pending_review: list[PendingReviewOut] = []
     rejected: list[dict] = []
+
+
+class OCRExtractedOut(BaseModel):
+    """Borrador extraído por OCR antes de la confirmación del usuario."""
+    amount: Decimal
+    description_suggested: str
+    date_suggested: date
+    area_suggested: list[str]
+    type_suggested: Literal["Income", "Expenses"]
+    currency: str
 
 
 # Helpers para serializar TransactionRecord (Pydantic) → dict de salida
@@ -107,6 +121,60 @@ def add_manual(
             for p in result.pending_review
         ],
         rejected=[{"reason": r.reason} for r in result.rejected],
+    )
+
+
+@router.post(
+    "/ocr-extract",
+    response_model=OCRExtractedOut,
+    summary="Extraer datos de una imagen de factura (sin persistir)",
+)
+async def ocr_extract(
+    image: UploadFile = File(..., description="Imagen del ticket/factura"),
+    description_hint: Optional[str] = Form(None),
+    date_hint: Optional[date] = Form(None),
+    user_id: str = Depends(get_current_user_id),
+) -> OCRExtractedOut:
+    """
+    Solo OCR: lee la imagen y devuelve un borrador (importe, fecha, área
+    sugerida, descripción). No persiste nada — el cliente debe llamar a
+    `POST /transactions` con los datos confirmados/editados por el usuario.
+    """
+    if image.content_type not in _ALLOWED_IMAGE_MIME:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Formato no soportado: {image.content_type}",
+        )
+    image_bytes = await image.read()
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Imagen demasiado grande (máx. {_MAX_IMAGE_BYTES // (1024 * 1024)} MB)",
+        )
+    if not image_bytes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Imagen vacía")
+
+    upload = ImageUpload(
+        user_id=user_id,
+        image=image_bytes,
+        description_hint=description_hint,
+        date_hint=date_hint,
+    )
+    result = registrar.extract_from_image(upload)
+    if result.extracted is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            result.reason or "No se pudo procesar la imagen",
+        )
+
+    e = result.extracted
+    return OCRExtractedOut(
+        amount=e.amount,
+        description_suggested=e.description_suggested,
+        date_suggested=e.date_suggested,
+        area_suggested=e.area_suggested,
+        type_suggested=e.type_suggested,
+        currency=e.currency,
     )
 
 

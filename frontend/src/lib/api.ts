@@ -42,6 +42,29 @@ export type PendingReview = {
   anomaly_reasons: string[];
 };
 
+export type OCRExtracted = {
+  amount: string;                     // Decimal serializado como string
+  description_suggested: string;
+  date_suggested: string;             // ISO YYYY-MM-DD
+  area_suggested: string[];
+  type_suggested: "Income" | "Expenses";
+  currency: string;
+};
+
+export type ManualTransactionInput = {
+  description: string;
+  date: string;                       // ISO YYYY-MM-DD
+  amount: string;                     // mantenemos string para no perder precisión
+  type: "Income" | "Expenses";
+  area?: string[];
+};
+
+export type ManualTransactionResponse = {
+  accepted: TransactionRecord[];
+  pending_review: PendingReview[];
+  rejected: { reason: string }[];
+};
+
 // Helpers privados
 
 function getToken(): string | null {
@@ -166,6 +189,35 @@ export async function chat(
 }
 
 // Transacciones
+
+export async function extractFromImage(
+  file: File,
+  hint?: string,
+  dateHint?: string,
+): Promise<OCRExtracted> {
+  const fd = new FormData();
+  fd.append("image", file);
+  if (hint) fd.append("description_hint", hint);
+  if (dateHint) fd.append("date_hint", dateHint);
+  // No fijamos Content-Type: el navegador añade el boundary automáticamente.
+  const res = await authedFetch("/transactions/ocr-extract", {
+    method: "POST",
+    body: fd,
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function addManualTransaction(
+  input: ManualTransactionInput,
+): Promise<ManualTransactionResponse> {
+  const res = await authedFetch("/transactions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
 
 export async function listPending(): Promise<PendingReview[]> {
   const res = await authedFetch("/transactions/pending");

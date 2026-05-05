@@ -3,10 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { chat, clearToken, getUserId } from "@/lib/api";
+import {
+  addManualTransaction,
+  chat,
+  clearToken,
+  extractFromImage,
+  getUserId,
+  type ManualTransactionInput,
+  type OCRExtracted,
+} from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { OCRConfirmModal } from "@/components/OCRConfirmModal";
 
 type Turn = {
   role: "user" | "assistant";
@@ -31,6 +40,21 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // OCR
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrExtracted, setOcrExtracted] = useState<OCRExtracted | null>(null);
+  const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | null>(null);
+  const [ocrSubmitting, setOcrSubmitting] = useState(false);
+  const [ocrModalError, setOcrModalError] = useState<string | null>(null);
+
+  // Libera la URL del blob cuando cambia el preview
+  useEffect(() => {
+    return () => {
+      if (ocrPreviewUrl) URL.revokeObjectURL(ocrPreviewUrl);
+    };
+  }, [ocrPreviewUrl]);
 
   // Protege la ruta: sin token → /login
   useEffect(() => {
@@ -82,6 +106,87 @@ export default function ChatPage() {
   const onLogout = () => {
     clearToken();
     router.replace("/login");
+  };
+
+  const onAttachClick = () => {
+    if (loading || ocrLoading) return;
+    fileInputRef.current?.click();
+  };
+
+  const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite reseleccionar la misma imagen
+    if (!file) return;
+
+    setError(null);
+    setOcrModalError(null);
+    setOcrLoading(true);
+
+    // Preview local mientras se procesa
+    const url = URL.createObjectURL(file);
+    if (ocrPreviewUrl) URL.revokeObjectURL(ocrPreviewUrl);
+    setOcrPreviewUrl(url);
+
+    setTurns((t) => [...t, { role: "user", text: `📎 ${file.name}` }]);
+
+    try {
+      const extracted = await extractFromImage(file);
+      setOcrExtracted(extracted);
+    } catch (err) {
+      const msg = (err as Error).message;
+      setError(`OCR: ${msg}`);
+      URL.revokeObjectURL(url);
+      setOcrPreviewUrl(null);
+      if (msg.toLowerCase().includes("token") || msg.includes("401")) {
+        clearToken();
+        router.replace("/login");
+      }
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const onOcrConfirm = async (input: ManualTransactionInput) => {
+    setOcrSubmitting(true);
+    setOcrModalError(null);
+    try {
+      const res = await addManualTransaction(input);
+      const accepted = res.accepted[0];
+      const pending = res.pending_review[0];
+      const rejected = res.rejected[0];
+
+      let assistantText: string;
+      if (accepted) {
+        const areaTxt = accepted.area.length ? ` · ${accepted.area.join(", ")}` : "";
+        assistantText = `Gasto registrado: ${accepted.amount} ${accepted.currency}${areaTxt} (id ${accepted.id.slice(0, 8)}…).`;
+      } else if (pending) {
+        assistantText =
+          `Transacción guardada como pendiente de revisión. Razones: ` +
+          `${pending.anomaly_reasons.join("; ") || "sin detalle"}.`;
+      } else if (rejected) {
+        assistantText = `No se pudo registrar: ${rejected.reason}`;
+      } else {
+        assistantText = "Operación completada sin resultado.";
+      }
+      setTurns((t) => [...t, { role: "assistant", text: assistantText, action: "registrar" }]);
+
+      // Cierra el modal solo si el backend aceptó el alta (incluye pending_review).
+      setOcrExtracted(null);
+      if (ocrPreviewUrl) URL.revokeObjectURL(ocrPreviewUrl);
+      setOcrPreviewUrl(null);
+    } catch (err) {
+      setOcrModalError((err as Error).message);
+    } finally {
+      setOcrSubmitting(false);
+    }
+  };
+
+  const onOcrCancel = () => {
+    if (ocrSubmitting) return;
+    setOcrExtracted(null);
+    if (ocrPreviewUrl) URL.revokeObjectURL(ocrPreviewUrl);
+    setOcrPreviewUrl(null);
+    setOcrModalError(null);
   };
 
   const copyToClipboard = async (text: string) => {
@@ -266,6 +371,32 @@ export default function ChatPage() {
             {/* Input Form */}
             <div className="pt-4 border-t border-slate-200/50">
               <form onSubmit={onSubmit} className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={onFileChosen}
+                />
+                <button
+                  type="button"
+                  onClick={onAttachClick}
+                  disabled={loading || ocrLoading}
+                  title="Adjuntar factura para OCR"
+                  className="px-3 rounded-lg border border-slate-300/50 bg-white/80 backdrop-blur-sm hover:bg-slate-50 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {ocrLoading ? (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                      <path fill="currentColor" className="opacity-75" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  )}
+                </button>
                 <div className="flex-1 relative">
                   <input
                     type="text"
@@ -299,6 +430,16 @@ export default function ChatPage() {
           </CardContent>
         </Card>
       </main>
+
+      <OCRConfirmModal
+        open={ocrExtracted !== null}
+        initial={ocrExtracted}
+        previewUrl={ocrPreviewUrl}
+        submitting={ocrSubmitting}
+        error={ocrModalError}
+        onCancel={onOcrCancel}
+        onConfirm={onOcrConfirm}
+      />
 
       {error && (
         <div className="fixed bottom-4 right-4 max-w-md">
