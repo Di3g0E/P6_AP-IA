@@ -111,7 +111,10 @@ REGLAS DURAS:
 2. Responde en español, conciso (2-4 frases) y con las 1-2 cifras clave.
 3. Si los datos contienen `error` o `empty: true`, díselo al usuario con
    tono útil y sugiere una alternativa.
-4. NO menciones nombres internos de operaciones (`monthly_summary`, etc.).
+4. NO menciones nombres internos de operaciones (`monthly_summary`, etc.) ni
+   etiquetas de acción (`respond_final`, `delegate_analyst`, `ask_user`, etc.).
+   El mensaje debe terminar con una frase natural en español, sin tokens
+   técnicos al final.
 5. NO devuelvas JSON: solo texto natural para el usuario.
 6. Si te llega `metrics.kind == 'recent_transactions'`, lista los items con
    fecha + descripción + importe + área en el orden recibido.

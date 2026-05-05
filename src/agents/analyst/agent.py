@@ -113,9 +113,24 @@ def predict_next_month(df: pd.DataFrame, area: Optional[str] = None,
     if df.empty:
         return AnalysisReport(type="prediction", metrics={"empty": True})
 
-    expenses = df[df["Type"] == "Expenses"]
+    all_expenses = df[df["Type"] == "Expenses"]
+    expenses = all_expenses
+    area_fallback_note: Optional[str] = None
     if area:
-        expenses = expenses[expenses["Area"] == area]
+        # Match por subcadena case-insensitive: cubre "Leisure" frente a
+        # "Leisure, Vacations" y traducciones aproximadas que use el LLM.
+        mask = all_expenses["Area"].str.contains(area, case=False, na=False)
+        filtered = all_expenses[mask]
+        # Fallback: si el filtro deja menos histórico del minimo, predecir sobre
+        # el total y avisar al narrador en el report. Mejor una respuesta util
+        # que un "histórico insuficiente" cuando hay 5 años de datos.
+        if filtered.groupby("YearMonth").ngroups >= 6:
+            expenses = filtered
+        else:
+            area_fallback_note = (
+                f"sin datos suficientes para '{area}'; "
+                f"prediccion calculada sobre el total de gastos"
+            )
 
     monthly = expenses.groupby("YearMonth")["Amount_clean"].sum().sort_index()
     if len(monthly) < 6:
@@ -133,6 +148,9 @@ def predict_next_month(df: pd.DataFrame, area: Optional[str] = None,
         "history_months": len(monthly),
         **result,
     }
+    if area_fallback_note:
+        metrics["note"] = area_fallback_note
+        metrics["area"] = "all"
     return AnalysisReport(type="prediction", metrics=metrics, series=series)
 
 

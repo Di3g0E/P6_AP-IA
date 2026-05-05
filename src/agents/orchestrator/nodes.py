@@ -19,6 +19,7 @@ vuelva a elegir `delegate_analyst` y entre en bucle.
 from __future__ import annotations
 
 import inspect
+import re
 
 import pandas as pd
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
@@ -43,6 +44,20 @@ from src.utils.logging_config import Stopwatch, log_event
 def _load_user_dataframe(user_id: str) -> pd.DataFrame:
     """Alias local hacia el helper compartido (mantiene la API anterior)."""
     return load_user_transactions(user_id)
+
+
+# Algunos LLMs filtran al final del texto la etiqueta de la accion que han
+# elegido (`respond_final`, `delegate_analyst`, ...). El prompt ya lo prohibe,
+# pero esto es un cinturon de seguridad para que nunca llegue al usuario.
+_ACTION_LABEL_RE = re.compile(
+    r"\s*(?:respond_final|delegate_analyst|delegate_security|delegate_registrar|"
+    r"ask_user|confirm_pending|reject_pending)\s*\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_action_labels(text: str) -> str:
+    return _ACTION_LABEL_RE.sub("", text).rstrip()
 
 
 # Helpers privados del orquestador
@@ -99,6 +114,7 @@ def _narrate(state: OrchestratorState, iterations: int) -> dict:
         ]
         response = llm.invoke(prompt)
         text = response.content if hasattr(response, "content") else str(response)
+        text = _strip_action_labels(text)
         sw.payload["chars"] = len(text)
 
     return {
