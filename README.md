@@ -77,175 +77,84 @@ P6_AP-IA/
 
 ## Configuración del entorno
 
-### Opción 1 — Local con `uv` (desarrollo, sin Docker)
+### Opción 1 — Despliegue en Producción (Vercel + Supabase)
 
-Por defecto usa **SQLite** en `data/p6.db`; cero setup adicional.
+Esta es la configuración utilizada para el entorno de producción. Combina **Supabase** (Base de datos), **ngrok/Cloudflare** (Túnel para el backend) y **Vercel** (Frontend).
+
+#### 1.1 — Base de datos en Supabase (Postgres)
+
+1.  Crea una cuenta en [Supabase](https://supabase.com) → **New project**.
+2.  En el dashboard, ve a **Connect** → **Connection pooling** (puerto `6543`, modo *Transaction*).
+3.  Copia la URI y añádela a tu `.env` con el prefijo `+psycopg` (necesario para SQLAlchemy + Psycopg 3):
+    ```env
+    DATABASE_URL=postgresql+psycopg://postgres.<ref>:<PASSWORD>@aws-1-<region>.pooler.supabase.com:6543/postgres
+    ```
+4.  Inicializa las tablas y carga los datos de la demo:
+    ```bash
+    .venv/Scripts/python.exe scripts/init_db.py
+    ```
+
+#### 1.2 — Backend con Túnel (ngrok o Cloudflare)
+
+Dado que el backend utiliza modelos pesados (Torch, PaddleOCR), se aloja en un servidor dedicado o máquina local y se expone mediante un túnel:
+
+1.  **Lanzar el túnel**:
+    ```bash
+    ngrok http --url=tu-dominio-estatico.ngrok-free.app 8000
+    ```
+2.  **Configurar CORS**: En el `.env` del backend, añade la URL de Vercel:
+    ```env
+    CORS_ORIGINS=https://tu-proyecto.vercel.app
+    ```
+3.  **Arrancar API**:
+    ```bash
+    .venv/Scripts/python.exe -m uvicorn src.api.main:app --port 8000
+    ```
+
+#### 1.3 — Frontend en Vercel (Next.js)
+
+1.  Importa el repositorio en [Vercel](https://vercel.com).
+2.  Configura el **Root Directory** como `frontend/`.
+3.  Añade la variable de entorno:
+    *   `NEXT_PUBLIC_API_BASE_URL`: La URL de tu túnel (ej: `https://tu-dominio.ngrok-free.app`).
+4.  **Deploy**. El frontend se conectará automáticamente al backend a través del túnel.
+
+#### 1.4 — Post-despliegue y Uso
+
+*   **Cargar datos en cuenta real**: Para que tu usuario registrado vea los datos de ejemplo del CSV:
+    ```bash
+    .venv/Scripts/python.exe scripts/transfer_demo_data.py <tu_email>
+    ```
+*   **Probar la demo**: Abre tu dominio de Vercel, regístrate y prueba el `/chat`. Las anomalías detectadas aparecerán en `/pending`.
+*   **Rutina diaria**: Cada vez que quieras usar el sistema:
+    1. Lanza el túnel: `ngrok http --url=tu-dominio.ngrok-free.app 8000`
+    2. Lanza el backend: `.venv/Scripts/python.exe -m uvicorn src.api.main:app --port 8000`
+    3. Usa la app en la URL de Vercel.
+
+---
+
+### Opción 2 — Desarrollo Local (uv)
+
+Ideal para desarrollo rápido sin Docker. Usa **SQLite** por defecto.
+
+1.  **Entorno**: `uv venv .venv --python 3.12`
+2.  **Dependencias**: `uv pip install -r requirements.txt`
+3.  **Variables**: `cp .env.example .env` (configura `GROQ_API_KEY` y `MASTER_FERNET_KEY`).
+4.  **Init DB**: `.venv/Scripts/python.exe scripts/init_db.py`
+5.  **Ejecutar CLI**: `.venv/Scripts/python.exe main.py`
+
+---
+
+### Opción 3 — Docker Compose
+
+Levanta un stack completo (Postgres + API) de forma aislada.
 
 ```bash
-# 1. Crear entorno virtual
-uv venv .venv --python 3.12
-
-# 2. Instalar dependencias
-uv pip install --python .venv/Scripts/python.exe --link-mode=copy -r requirements.txt
-
-# 3. Copiar variables de entorno
-cp .env.example .env
-# editar .env y rellenar:
-#   - MASTER_FERNET_KEY (generar con el comando indicado en el .env.example)
-#   - GROQ_API_KEY (https://console.groq.com)
-#   - DATABASE_URL — opcional; si vacío o '...' usa SQLite local automáticamente
-#   - TELEGRAM_BOT_TOKEN (opcional)
-
-# 4. Inicializar la base de datos (crea tablas + usuario demo + migra el CSV)
-.venv/Scripts/python.exe scripts/init_db.py
-
-# 5. Lanzar la demo CLI
-.venv/Scripts/python.exe main.py
-```
-
-> **Nota**: `scripts/init_db.py` es idempotente — vuelve a lanzarlo cuantas veces
-> quieras. Para empezar de cero usa `python scripts/init_db.py --reset`.
-
-### Opción 2 — Docker Compose (despliegue local + Postgres)
-
-```bash
-cp .env.example .env  # editar con tus claves
 docker compose up --build
-
-# (En otra terminal, una vez la BD está arriba)
+# En otra terminal:
 docker compose exec api python scripts/init_db.py
 ```
-
-Esto levanta `db` (Postgres 15) + `api` (FastAPI) en la misma red Docker. La API queda accesible en `http://localhost:8000`.
-
-> El `.env` debe tener `DATABASE_URL=postgresql+psycopg://app:app@db:5432/p6`
-> (la línea ya está en `.env.example`).
-
-### Opción 3 — Cloud gratuito (recomendado para demo pública)
-
-Combinación validada: **Supabase** (Postgres) + **ngrok** (URL pública para tu uvicorn local) + **Vercel** (frontend Next.js). Todo gratis, sin tarjeta.
-
-> El backend (con torch / paddleocr / facenet) **no cabe** en serverless. Vercel solo aloja el frontend; tu uvicorn sigue corriendo en tu PC y se expone vía un túnel HTTPS.
-
-#### 3.1 — Postgres en Supabase
-
-1. Crea cuenta en https://supabase.com → **New project**. Anota la **database password**.
-2. En el dashboard del proyecto, pulsa **Connect** (arriba) → bloque **Connection pooling** (puerto `6543`, modo *Transaction*). Copia la URI.
-3. En tu `.env`, prefija con `+psycopg`. **Sin comillas, sin `?pgbouncer=true`** (psycopg lo rechaza):
-   ```
-   DATABASE_URL=postgresql+psycopg://postgres.<ref>:<PASSWORD>@aws-1-<region>.pooler.supabase.com:6543/postgres
-   ```
-4. Inicializa tablas + usuario demo + migra el CSV:
-   ```bash
-   .venv/Scripts/python.exe scripts/init_db.py
-   ```
-   Espera `Migradas 887 transacciones del CSV al usuario demo.`
-
-#### 3.2 — Backend público con ngrok
-
-```bash
-winget install --id Ngrok.Ngrok
-# Authtoken (cuenta gratis en https://dashboard.ngrok.com)
-ngrok config add-authtoken <tu_authtoken>
-# Lanzar el tunel (deja la terminal abierta)
-ngrok http 8000
-```
-
-Apunta la URL `https://xxxx-xx.ngrok-free.dev` que aparece en `Forwarding`. Es la dirección pública del backend.
-
-> Plan free: la URL **cambia entre reinicios** y la primera visita en navegador muestra una pantalla azul (las llamadas API la saltan automáticamente con el header `ngrok-skip-browser-warning` que el frontend ya envía). Para una URL fija reclama un **dominio estático gratis** en `dashboard.ngrok.com → Domains` y lánzalo con `ngrok http --url=<tu-dominio>.ngrok-free.app 8000`.
-
-#### 3.3 — Frontend en Vercel
-
-1. Push del repo a GitHub si aún no está.
-2. https://vercel.com → **Sign up with GitHub** → **Add New → Project** → importa el repo.
-3. **Root Directory**: `frontend` (si tu repo es ya `P6_AP-IA`) o `P6_AP-IA/frontend` (en monorepo).
-4. **Environment Variables** → añade UNA:
-   - **Name**: `NEXT_PUBLIC_API_BASE_URL`
-   - **Value**: la URL ngrok del paso 3.2 (sin barra final).
-5. **Deploy**. En **Settings → Domains** verás el dominio Production estable (`<proyecto>.vercel.app`); úsalo, **no** el preview con hash que cambia con cada push.
-
-#### 3.4 — CORS y reinicio de uvicorn
-
-En `.env` del backend:
-```
-CORS_ORIGINS=http://localhost:3000,https://<proyecto>.vercel.app
-```
-**Reinicia uvicorn** (Ctrl+C + relanzar) para que recargue: FastAPI lee `CORS_ORIGINS` solo al arrancar. Sin esto, el navegador bloquea por CORS.
-
-#### 3.5 — Cargar datos del CSV en una cuenta real
-
-`init_db.py` migra el CSV al usuario demo (UUID fijo, sin biometría → no accesible vía web). Para que un usuario registrado por la web vea esos datos:
-
-```bash
-.venv/Scripts/python.exe scripts/transfer_demo_data.py <email_del_usuario>
-```
-
-Borra las transacciones existentes del destino y reasigna las del demo. Idempotente: vuelve a lanzar `init_db.py` para recargar el demo, y `transfer_demo_data.py` para preparar otra cuenta.
-
-> **Privacidad**: los datos viajan Vercel → ngrok → tu máquina → Supabase, todo sobre HTTPS. La biometría se cifra con Fernet en aplicación antes de tocar Postgres.
-
-#### 3.6 — Probar la demo
-
-Con backend, ngrok y frontend arriba:
-
-1. Abre tu dominio Vercel → `/register`. Crea un usuario con webcam + email + passphrase.
-2. (Opcional) Carga el CSV en esa cuenta: `.venv/Scripts/python.exe scripts/transfer_demo_data.py <email>`.
-3. Ve a `/login`, autentícate y prueba en `/chat`:
-   - "Resume mis gastos del último mes."
-   - "¿Cuál es la predicción de mis gastos para el mes que viene?"
-   - "Analiza la tendencia de mis gastos en Leisure de los últimos 6 meses."
-   - "Añade un gasto de 30€ en Food hoy."
-4. Las transacciones marcadas como anómalas por el agente Security aparecen en `/pending` para aprobar o rechazar.
-
-#### 3.7 — Rutina diaria (volver a levantar el backend en otro día)
-
-Una vez configurado todo (Supabase + ngrok + Vercel), cada sesión de uso solo requiere dos terminales abiertas en tu PC:
-
-**Terminal 1 — Backend**
-
-```powershell
-cd "C:\Users\diego\OneDrive - Universidad Rey Juan Carlos\Documentos\GIA_URJC\Curso 2025-26\Ap_IA\practicas\P6_AP-IA"
-.venv\Scripts\python.exe -m uvicorn src.api.main:app --port 8000
-```
-
-**Terminal 2 — Túnel ngrok**
-
-```powershell
-ngrok http 8000
-```
-
-Apunta la URL de la línea `Forwarding`.
-
-**Usar la app**: abre tu dominio Vercel (`https://<proyecto>.vercel.app`) → `/login`.
-
-##### Si la URL ngrok ha cambiado desde la última vez
-
-El plan free de ngrok asigna URL nueva cada arranque. Si `Forwarding` muestra una URL distinta a la que hay en Vercel:
-
-1. **Vercel → Settings → Environment Variables** → edita `NEXT_PUBLIC_API_BASE_URL` con la URL nueva.
-2. **Deployments → último → ⋯ → Redeploy** (sin caché).
-3. Espera 1-2 min y recarga `/login` con `Ctrl+Shift+R`.
-
-`CORS_ORIGINS` no hay que tocarlo (apunta a Vercel, no a ngrok).
-
-##### Solución definitiva: dominio ngrok estático gratis
-
-Para no perseguir URLs nunca más:
-
-1. https://dashboard.ngrok.com/cloud-edge/domains → **+ Create domain** (free incluye uno).
-2. Lanza el túnel anclado a ese dominio:
-   ```powershell
-   ngrok http --url=<tu-dominio>.ngrok-free.app 8000
-   ```
-3. Pon esa URL una vez en Vercel y se acabó la danza de redeploys.
-
-##### Cosas a recordar
-
-- **Cambias `.env` (CORS, claves, etc.)**: reinicia uvicorn (Ctrl+C + relanzar). FastAPI lee el `.env` solo al arrancar.
-- **Cambias código backend**: reinicia uvicorn (o usa `--reload` para autoreload en dev).
-- **Cambias código frontend**: push a GitHub, Vercel redeploya solo.
-- **Algo no funciona**: F12 en el navegador → Console → el primer error rojo dice qué falla (CORS, ngrok caído, JWT expirado, etc.).
+> **Nota**: Para que el comando `exec` funcione, asegúrate de que el directorio `scripts/` esté incluido en el Dockerfile o montado como volumen.
 
 
 ## Modos de ejecución
@@ -299,15 +208,6 @@ curl -X POST http://localhost:8000/chat \
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/transactions/pending
 ```
 
-### Tests
-
-```bash
-.venv/Scripts/python.exe -m pytest tests/ -v
-```
-
-Suite completa: 72 tests (analyst, registrar, security, orquestador,
-revisión de pendientes, integración BD y endpoints API).
-
 ### Frontend Next.js
 
 Cliente web con webcam + chat + revisión de pendientes en
@@ -327,6 +227,29 @@ Páginas:
 - `/login`, `/register` — captura por webcam + JWT al backend.
 - `/chat` — conversación con el orquestador (session_id mantenido entre turnos).
 - `/pending` — listar / aprobar / rechazar transacciones marcadas por Security.
+
+## Ejemplos de interacción (Prompts de prueba)
+
+Puedes probar las capacidades de los agentes utilizando las siguientes frases en el chat:
+
+### 📊 Agente Analyst (Análisis y Predicción)
+*   "Resume mis gastos del último mes por categoría."
+*   "¿Cuál es la predicción de mis gastos para el próximo mes?"
+*   "¿Cuánto he gastado en ocio (Leisure) en los últimos 6 meses?"
+*   "Analiza la tendencia de mis gastos de este año."
+
+### 📝 Agente Registrar (Registro de Transacciones)
+*   "Añade un gasto de 15€ en transporte hoy."
+*   "Ayer me gasté 2500€ en una cena en el restaurante La Tagliatella."
+*   "He pagado 20€ de parking esta mañana."
+*   *Nota: Al introducir un importe inusualmente alto (como los 2500€ de la cena), el **Agente Security** detectará la anomalía y marcará la transacción para revisión manual en `/pending`.*
+
+### 🤖 General / Orquestador
+*   "Hola, ¿qué puedes hacer por mí?"
+*   "¿Tengo alguna transacción pendiente de revisar?"
+*   "Dime el estado de mis ahorros."
+
+---
 
 ## Configuración de notificaciones (multiusuario)
 
@@ -368,11 +291,6 @@ Cada usuario decide su `notification_level`:
 - Endpoint `GET /me/export` que genera un ZIP con todos los datos del usuario.
 - Logs sin PII en claro: la tabla `events` solo guarda IDs/hashes y metadatos.
 - TLS obligatorio en producción (provisto por el túnel ngrok / Cloudflare y por Vercel).
-
-## Documentación adicional
-
-- [doc/agent_contracts.md](doc/agent_contracts.md) — Contrato de los agentes y dataclasses.
-- `.env.example` — Variables de entorno con documentación inline.
 
 ## Autores
 

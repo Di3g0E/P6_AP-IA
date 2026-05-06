@@ -37,6 +37,7 @@ RUN uv venv /app/.venv --python 3.12 && \
 COPY src /app/src
 COPY main.py /app/main.py
 COPY config /app/config
+COPY scripts /app/scripts
 
 # --- Directorios writeables ---
 RUN mkdir -p /app/data /app/logs /app/models
